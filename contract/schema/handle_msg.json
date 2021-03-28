@@ -1,0 +1,331 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HandleMsg",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "register"
+      ],
+      "properties": {
+        "register": {
+          "type": "object",
+          "required": [
+            "description",
+            "handle"
+          ],
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "handle": {
+              "type": "string"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_profile_thumbnail_img"
+      ],
+      "properties": {
+        "set_profile_thumbnail_img": {
+          "type": "object",
+          "required": [
+            "img"
+          ],
+          "properties": {
+            "img": {
+              "$ref": "#/definitions/Binary"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "generate_viewing_key"
+      ],
+      "properties": {
+        "generate_viewing_key": {
+          "type": "object",
+          "required": [
+            "entropy"
+          ],
+          "properties": {
+            "entropy": {
+              "type": "string"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "set_viewing_key"
+      ],
+      "properties": {
+        "set_viewing_key": {
+          "type": "object",
+          "required": [
+            "key"
+          ],
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "deactivate"
+      ],
+      "properties": {
+        "deactivate": {
+          "type": "object",
+          "properties": {
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "carry_fardel"
+      ],
+      "properties": {
+        "carry_fardel": {
+          "type": "object",
+          "required": [
+            "contents_text",
+            "cost",
+            "ipfs_cid",
+            "passphrase",
+            "public_message"
+          ],
+          "properties": {
+            "contents_text": {
+              "type": "string"
+            },
+            "cost": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "ipfs_cid": {
+              "type": "string"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "passphrase": {
+              "type": "string"
+            },
+            "public_message": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "seal_fardel"
+      ],
+      "properties": {
+        "seal_fardel": {
+          "type": "object",
+          "required": [
+            "fardel_id"
+          ],
+          "properties": {
+            "fardel_id": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "follow"
+      ],
+      "properties": {
+        "follow": {
+          "type": "object",
+          "required": [
+            "handle"
+          ],
+          "properties": {
+            "handle": {
+              "type": "string"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "unfollow"
+      ],
+      "properties": {
+        "unfollow": {
+          "type": "object",
+          "required": [
+            "handle"
+          ],
+          "properties": {
+            "handle": {
+              "type": "string"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "unpack_fardel"
+      ],
+      "properties": {
+        "unpack_fardel": {
+          "type": "object",
+          "required": [
+            "fardel_id"
+          ],
+          "properties": {
+            "fardel_id": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "rate_fardel"
+      ],
+      "properties": {
+        "rate_fardel": {
+          "type": "object",
+          "required": [
+            "fardel_id",
+            "rating"
+          ],
+          "properties": {
+            "fardel_id": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rating": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "comment_on_fardel"
+      ],
+      "properties": {
+        "comment_on_fardel": {
+          "type": "object",
+          "required": [
+            "comment",
+            "fardel_id"
+          ],
+          "properties": {
+            "comment": {
+              "type": "string"
+            },
+            "fardel_id": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "padding": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rating": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "Binary": {
+      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
+      "type": "string"
+    },
+    "Uint128": {
+      "type": "string"
+    }
+  }
+}

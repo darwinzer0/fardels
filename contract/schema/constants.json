@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Constants",
+  "type": "object",
+  "required": [
+    "admin",
+    "max_contents_passphrase_len",
+    "max_contents_text_len",
+    "max_cost",
+    "max_description_len",
+    "max_handle_len",
+    "max_ipfs_cid_len",
+    "max_public_message_len",
+    "max_thumbnail_img_size",
+    "prng_seed"
+  ],
+  "properties": {
+    "admin": {
+      "$ref": "#/definitions/HumanAddr"
+    },
+    "max_contents_passphrase_len": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "max_contents_text_len": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "max_cost": {
+      "type": "integer",
+      "format": "uint128",
+      "minimum": 0.0
+    },
+    "max_description_len": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "max_handle_len": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "max_ipfs_cid_len": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "max_public_message_len": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "max_thumbnail_img_size": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "prng_seed": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      }
+    }
+  },
+  "definitions": {
+    "HumanAddr": {
+      "type": "string"
+    }
+  }
+}
