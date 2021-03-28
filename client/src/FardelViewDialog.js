@@ -137,7 +137,7 @@ class FardelViewDialog extends Component {
             startIcon={<ThumbDownTwoToneIcon />}
             onClick={() => this.handleDownvote()}
            >
-            Upvote
+            Downvote
           </Button>
           <Button onClick={() => this.handleComment()}>
             Comment
