@@ -6,14 +6,24 @@ use crate::viewing_key::ViewingKey;
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
     pub admin: Option<HumanAddr>,
+
+    //fardel
     pub max_public_message_len: Option<i32>,
     pub max_thumbnail_img_size: Option<i32>,
     pub max_contents_text_len: Option<i32>,
+    pub max_cost: Option<Uint128>,
+    // new
+    pub max_contents_data_len: Option<i32>,
+    // del
     pub max_ipfs_cid_len: Option<i32>,
     pub max_contents_passphrase_len: Option<i32>,
+ 
+    // user
     pub max_handle_len: Option<i32>,
+    pub max_profile_img_size: Option<i32>,
     pub max_description_len: Option<i32>,
-    pub max_cost: Option<Uint128>,
+
+
     pub prng_seed: Binary,
 }
 
@@ -24,6 +34,7 @@ pub enum HandleMsg {
     Register { 
         handle: String,
         description: String,
+        profile_ing: Option<String>,
         padding: Option<String>,
     },
     SetProfileThumbnailImg {
