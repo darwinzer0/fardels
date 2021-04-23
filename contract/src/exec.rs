@@ -18,7 +18,6 @@ use crate::state::{ReadonlyConfig,
 use crate::viewing_key::{ViewingKey};
 use crate::contract::DENOM;
 
-
 pub fn try_register<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -135,7 +134,7 @@ pub fn try_set_profile_thumbnail_img<S: Storage, A: Api, Q: Querier>(
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
     let img: Vec<u8> = img.0;
-    if img.len() as u32 > constants.max_thumbnail_img_size {
+    if img.len() as u32 > constants.max_profile_img_size {
         status = Failure;
         msg = Some(String::from("Thumbnail image is too large."));
     } else {

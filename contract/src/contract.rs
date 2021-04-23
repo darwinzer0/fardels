@@ -46,29 +46,34 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     let prng_seed_hashed = sha_256(&msg.prng_seed.0);
 
     let max_cost = match msg.max_cost{
-        Some(v) => v.u128(),
+        Some(cost) => cost.u128(),
         None => DEFAULT_MAX_COST
     };
 
+    // fardel settings
     let max_public_message_len = valid_max_public_message_len(msg.max_public_message_len)?;
-    let max_thumbnail_img_size = valid_max_thumbnail_img_size(msg.max_thumbnail_img_size)?;
+    let max_fardel_img_size = valid_max_thumbnail_img_size(msg.max_fardel_img_size)?;
     let max_contents_text_len = valid_max_contents_text_len(msg.max_contents_text_len)?;
     let max_ipfs_cid_len = valid_max_ipfs_cid_len(msg.max_ipfs_cid_len)?;
     let max_contents_passphrase_len = valid_max_contents_passphrase_len(msg.max_contents_passphrase_len)?;
+
+    // user settings
     let max_handle_len = valid_max_handle_len(msg.max_handle_len)?;
     let max_description_len = valid_max_description_len(msg.max_description_len)?;
+    let max_profile_img_size = valid_max_thumbnail_img_size(msg.max_profile_img_size)?;
 
     let mut config = Config::from_storage(&mut deps.storage);
     config.set_constants(&Constants {
         admin,
         max_cost,
         max_public_message_len,
-        max_thumbnail_img_size,
+        max_fardel_img_size,
         max_contents_text_len,
         max_ipfs_cid_len,
         max_contents_passphrase_len,
         max_handle_len,
         max_description_len,
+        max_profile_img_size,
         prng_seed: prng_seed_hashed.to_vec(),
     })?;
 

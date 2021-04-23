@@ -7,14 +7,14 @@ use crate::viewing_key::ViewingKey;
 pub struct InitMsg {
     pub admin: Option<HumanAddr>,
 
-    //fardel
-    pub max_public_message_len: Option<i32>,
-    pub max_thumbnail_img_size: Option<i32>,
-    pub max_contents_text_len: Option<i32>,
+    // fardel (public) settings
     pub max_cost: Option<Uint128>,
-    // new
+    pub max_public_message_len: Option<i32>,
+    pub max_fardel_img_size: Option<i32>,
+    // fardel (private) settings
     pub max_contents_data_len: Option<i32>,
     // del
+    pub max_contents_text_len: Option<i32>,
     pub max_ipfs_cid_len: Option<i32>,
     pub max_contents_passphrase_len: Option<i32>,
  

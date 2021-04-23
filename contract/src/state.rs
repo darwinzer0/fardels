@@ -43,16 +43,21 @@ pub const PREFIX_VIEWING_KEY: &[u8] = b"viewingkey";
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct Constants {
+    //todo: change to vec
     pub admin: HumanAddr,
+    // fardel settings
     // maximum cost of a fardel
     pub max_cost: u128,
     pub max_public_message_len: u16,
-    pub max_thumbnail_img_size: u32,
+    pub max_fardel_img_size: u32,
     pub max_contents_text_len: u16,
     pub max_ipfs_cid_len: u16,
     pub max_contents_passphrase_len: u16,
+    // user settings
     pub max_handle_len: u16,
     pub max_description_len: u16,
+    pub max_profile_img_size: u32,
+    
     pub prng_seed: Vec<u8>,
 }
 
