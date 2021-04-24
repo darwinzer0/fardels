@@ -51,10 +51,13 @@ pub struct Constants {
     // maximum cost of a fardel
     pub max_cost: u128,
     pub max_public_message_len: u16,
+    pub max_tag_len: u8,
+    pub max_number_of_tags: u8,
     pub max_fardel_img_size: u32,
-    pub max_contents_text_len: u16,
-    pub max_ipfs_cid_len: u16,
-    pub max_contents_passphrase_len: u16,
+    pub max_contents_data_len: u16,
+    //pub max_contents_text_len: u16,
+    //pub max_ipfs_cid_len: u16,
+    //pub max_contents_passphrase_len: u16,
     // user settings
     pub max_handle_len: u16,
     pub max_description_len: u16,

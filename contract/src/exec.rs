@@ -22,10 +22,11 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     handle: String,
-    description: String,
+    description: Option<String>,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
+    let description = description.unwrap_or_else(|| "".to_string());
 
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
     let handle = handle.trim().to_owned();

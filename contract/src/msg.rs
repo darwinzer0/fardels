@@ -23,6 +23,7 @@ pub struct InitMsg {
     pub max_tag_len: Option<i32>,
     pub max_number_of_tags: Option<i32>,
     pub max_fardel_img_size: Option<i32>,
+
     // fardel (private) settings
     pub max_contents_data_len: Option<i32>,
  
@@ -340,8 +341,8 @@ pub enum QueryMsg {
 impl QueryMsg {
     pub fn get_validation_params(&self) -> (Vec<&HumanAddr>, ViewingKey) {
         match self {
-            Self::GetHandle { address, key } => (vec![address], ViewingKey(key.clone())),
             Self::GetTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetHandle { address, key } => (vec![address], ViewingKey(key.clone())),
             Self::GetFollowing { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelByIdAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),

@@ -77,7 +77,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         id: Uint128(fardel_id),
         public_message: fardel.public_message,
         cost: fardel.cost.amount,
-        packed: true,
+        unpacked: false,
         has_ipfs_cid,
         upvotes,
         downvotes,
@@ -120,14 +120,14 @@ pub fn query_get_fardel_by_id_auth<S: Storage, A: Api, Q: Querier>(
     let mut contents_text: Option<String> = None;
     let mut ipfs_cid: Option<String> = None;
     let mut passphrase: Option<String> = None;
-    let mut packed = true;
+    let mut unpacked = false;
 
     let unpacker = &deps.api.canonical_address(address)?;
     if get_unpacked_status_by_fardel_id(&deps.storage, unpacker, fardel_id) {
         contents_text = Some(fardel.contents_text);
         ipfs_cid = Some(fardel.ipfs_cid);
         passphrase = Some(fardel.passphrase);
-        packed = false;
+        unpacked = true;
     }
 
     let timestamp: i32 = fardel.timestamp as i32;
@@ -136,7 +136,7 @@ pub fn query_get_fardel_by_id_auth<S: Storage, A: Api, Q: Querier>(
         id: Uint128(fardel_id),
         public_message: fardel.public_message,
         cost: fardel.cost.amount,
-        packed,
+        unpacked,
         has_ipfs_cid,
         upvotes,
         downvotes,
@@ -189,7 +189,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     id: Uint128(fardel_id),
                     public_message: fardel.public_message.clone(),
                     cost: fardel.cost.amount,
-                    packed: true,
+                    unpacked: true,
                     has_ipfs_cid,
                     upvotes,
                     downvotes,
@@ -241,21 +241,21 @@ pub fn query_get_fardels_auth<S: Storage, A: Api, Q: Querier>(
                 let mut ipfs_cid: Option<String> = None;
                 let mut passphrase: Option<String> = None;
                 let timestamp: i32 = fardel.timestamp as i32;
-                let mut packed = true;
+                let mut unpacked = false;
 
                 let unpacker = &deps.api.canonical_address(address).unwrap();
                 if get_unpacked_status_by_fardel_id(&deps.storage, unpacker, fardel_id) {
                     contents_text = Some(fardel.contents_text.clone());
                     ipfs_cid = Some(fardel.ipfs_cid.clone());
                     passphrase = Some(fardel.passphrase.clone());
-                    packed = false;
+                    unpacked = true;
                 }
 
                 FardelResponse {
                     id: Uint128(fardel_id),
                     public_message: fardel.public_message.clone(),
                     cost: fardel.cost.amount,
-                    packed,
+                    unpacked,
                     has_ipfs_cid,
                     upvotes,
                     downvotes,

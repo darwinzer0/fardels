@@ -22,8 +22,8 @@ use crate::state::{
     Config, Constants, read_viewing_key,
 };
 use crate::validation::{
-    valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_text_len,
-    valid_max_ipfs_cid_len, valid_max_contents_passphrase_len, valid_max_handle_len,
+    valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
+    valid_max_handle_len, valid_max_tag_len, valid_max_number_of_tags,
     valid_max_description_len, valid_max_query_page_size,
 };
 use crate::viewing_key::{VIEWING_KEY_SIZE};
@@ -55,10 +55,10 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 
     // fardel settings
     let max_public_message_len = valid_max_public_message_len(msg.max_public_message_len)?;
+    let max_tag_len = valid_max_tag_len(msg.max_tag_len)?;
+    let max_number_of_tags = valid_max_number_of_tags(msg.max_number_of_tags)?;
     let max_fardel_img_size = valid_max_thumbnail_img_size(msg.max_fardel_img_size)?;
-    let max_contents_text_len = valid_max_contents_text_len(msg.max_contents_text_len)?;
-    let max_ipfs_cid_len = valid_max_ipfs_cid_len(msg.max_ipfs_cid_len)?;
-    let max_contents_passphrase_len = valid_max_contents_passphrase_len(msg.max_contents_passphrase_len)?;
+    let max_contents_data_len = valid_max_contents_data_len(msg.max_contents_data_len)?;
 
     // user settings
     let max_handle_len = valid_max_handle_len(msg.max_handle_len)?;
@@ -70,10 +70,10 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         admin,
         max_cost,
         max_public_message_len,
+        max_tag_len,
+        max_number_of_tags,
         max_fardel_img_size,
-        max_contents_text_len,
-        max_ipfs_cid_len,
-        max_contents_passphrase_len,
+        max_contents_data_len,
         max_handle_len,
         max_description_len,
         max_profile_img_size,
@@ -138,6 +138,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
             query_get_fardel_by_id(deps, fardel_id),
         QueryMsg::GetFardels { handle, page, page_size } =>
             query_get_fardels(deps, handle, page, page_size),
+        QueryMsg::GetComments { fardel_id, page, page_size } =>
+            query_get_comments(deps, fardel_id, page, page_size),
         _ => authenticated_queries(deps, msg),
     }
 }
@@ -160,12 +162,22 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
         } else if key.check_viewing_key(expected_key.unwrap().as_slice()) {
             return match msg {
                 // Base
-                QueryMsg::GetHandle { address, .. } => query_get_handle(&deps, &address),
-                QueryMsg::GetFollowing { address, .. } => query_get_following(&deps, &address),
+                QueryMsg::GetTransactions { address, page, page_size, .. } => 
+                    query_get_transactions(&deps, &address, page, page_size),
+                QueryMsg::GetHandle { address, .. } => 
+                    query_get_handle(&deps, &address),
+                QueryMsg::GetFollowing { address, .. } => 
+                    query_get_following(&deps, &address),
                 QueryMsg::GetFardelByIdAuth { address, fardel_id, .. } => 
                     query_get_fardel_by_id_auth(&deps, &address, fardel_id),
                 QueryMsg::GetFardelsAuth { address, handle, page, page_size, .. } =>
                     query_get_fardels_auth(&deps, &address, handle, page, page_size),
+                QueryMsg::GetUnpacked { address, page, page_size, .. } =>
+                    query_get_unpacked(&deps, &address, page, page_size),
+                QueryMsg::GetCommentsAuth { address, fardel_id, page, page_size, .. } =>
+                    query_get_comments_auth(&deps, &address, fardel_id, page, page_size),
+                QueryMsg::GetFardelsBatch { address, page, page_size, .. } =>
+                    query_get_fardels_batch(&deps, &address, page, page_size),
                 _ => panic!("This query type does not require authentication"),
             };
         }
