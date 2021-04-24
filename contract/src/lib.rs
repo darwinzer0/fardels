@@ -6,6 +6,7 @@ mod query;
 mod utils;
 mod validation;
 mod viewing_key;
+mod u256_math;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {

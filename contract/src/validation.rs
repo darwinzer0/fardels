@@ -3,6 +3,7 @@ use cosmwasm_std::{
     StdError, StdResult,
 };
 
+pub const DEFAULT_MAX_QUERY_PAGE_SIZE: u16 = 10_u16;
 pub const DEFAULT_MAX_PUBLIC_MESSAGE_LEN: u16 = 280_u16;
 pub const DEFAULT_MAX_THUMBNAIL_IMG_SIZE: u32 = 65536_u32;
 pub const DEFAULT_MAX_CONTENTS_TEXT_LEN: u16 = 280_u16;
@@ -10,6 +11,19 @@ pub const DEFAULT_MAX_IPFS_CID_LEN: u16 = 128_u16;
 pub const DEFAULT_MAX_CONTENTS_PASSPHRASE_LEN: u16 = 64_u16;
 pub const DEFAULT_MAX_HANDLE_LEN: u16 = 64_u16;
 pub const DEFAULT_MAX_DESCRIPTION_LEN: u16 = 280_u16;
+
+pub fn valid_max_query_page_size(val: Option<i32>) -> StdResult<u16> {
+    match val {
+        Some(v) => {
+            if v < 1 {
+                Err(StdError::generic_err("invalid max_query_page_size"))
+            } else {
+                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_query_page_size")))
+            }
+        },
+        None => Ok(DEFAULT_MAX_QUERY_PAGE_SIZE)
+    }
+}
 
 // limit the max public message size to values in 1..65535, default 280 bytes
 pub fn valid_max_public_message_len(val: Option<i32>) -> StdResult<u16> {

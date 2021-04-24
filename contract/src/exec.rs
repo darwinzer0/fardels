@@ -76,53 +76,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-//fn try_register_and_generate_viewing_key<S: Storage, A: Api, Q: Querier>(
-//    deps: &mut Extern<S, A, Q>,
-//    env: Env,
-//    handle: String,
-//    entropy: String,
-//) -> StdResult<HandleResponse> {
-//    let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
-//    let prng_seed = constants.prng_seed;
-//
-//    let key = ViewingKey::new(&env, &prng_seed, (&entropy).as_ref());
-//
-//    let message_sender = deps.api.canonical_address(&env.message.sender)?;
-//
-//    // todo store handle and key
-//
-//    Ok(HandleResponse {
-//        messages: vec![],
-//        log: vec![],
-//        data: Some(to_binary(&HandleAnswer::RegisterAndGenerateViewingKey { 
-//            status: Success,
-//            key: Some(key),
-//        })?),
-//    })
-//}
-
-//fn try_register_and_set_viewing_key<S: Storage, A: Api, Q: Querier>(
-//    deps: &mut Extern<S, A, Q>,
-//    env: Env,
-//    handle: String,
-//    key: String,
-//) -> StdResult<HandleResponse> {
-//    let vk = ViewingKey(key);
-//
-//    let message_sender = deps.api.canonical_address(&env.message.sender)?;
-//
-//    // todo store handle and key
-//
-//    Ok(HandleResponse {
-//        messages: vec![],
-//        log: vec![],
-//        data: Some(to_binary(&HandleAnswer::RegisterAndSetViewingKey { 
-//            status: Success,
-//        })?),
-//    })
-//}
-
-pub fn try_set_profile_thumbnail_img<S: Storage, A: Api, Q: Querier>(
+pub fn try_set_profile_img<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     img: Binary,
@@ -144,7 +98,7 @@ pub fn try_set_profile_thumbnail_img<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::SetProfileThumbnailImg { status, msg })?),
+        data: Some(to_binary(&HandleAnswer::SetProfileImg { status, msg })?),
     })
 }
 

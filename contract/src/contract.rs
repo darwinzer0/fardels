@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
-    try_register, try_set_profile_thumbnail_img, try_generate_viewing_key,
+    try_register, try_set_profile_img, try_generate_viewing_key,
     try_set_viewing_key, try_deactivate, try_carry_fardel, try_seal_fardel,
     try_follow, try_unfollow, try_rate_fardel, try_comment_on_fardel,
     try_unpack_fardel,
@@ -24,7 +24,7 @@ use crate::state::{
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_text_len,
     valid_max_ipfs_cid_len, valid_max_contents_passphrase_len, valid_max_handle_len,
-    valid_max_description_len,
+    valid_max_description_len, valid_max_query_page_size,
 };
 use crate::viewing_key::{VIEWING_KEY_SIZE};
 
@@ -49,6 +49,9 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         Some(cost) => cost.u128(),
         None => DEFAULT_MAX_COST
     };
+
+    // admin settings
+    let max_query_page_size = valid_max_query_page_size(msg.max_query_page_size)?;
 
     // fardel settings
     let max_public_message_len = valid_max_public_message_len(msg.max_public_message_len)?;
@@ -89,8 +92,8 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         // Account 
         HandleMsg::Register { handle, description, .. } => 
           try_register(deps, env, handle, description),
-        HandleMsg::SetProfileThumbnailImg { img, .. } =>
-          try_set_profile_thumbnail_img(deps, env, img),
+        HandleMsg::SetProfileImg { img, .. } =>
+          try_set_profile_img(deps, env, img),
         //HandleMsg::RegisterAndGenerateViewingKey { handle, entropy, .. } => 
         //  try_register_and_generate_viewing_key(deps, env, handle, entropy),
         //HandleMsg::RegisterAndSetViewingKey { handle, key, .. } => 

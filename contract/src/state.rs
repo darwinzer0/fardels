@@ -37,6 +37,8 @@ pub const PREFIX_ACCOUNT_THUMBNAIL_IMGS: &[u8] = b"account-img";
 pub const PREFIX_HANDLES: &[u8] = b"handle";
 pub const PREFIX_VIEWING_KEY: &[u8] = b"viewingkey";
 
+// Transactions
+
 //
 // CONFIG
 //
@@ -393,7 +395,6 @@ pub fn remove_following<A: Api, S: Storage>(
     let mut store = PrefixedStorage::new(PREFIX_FOLLOWING, storage);
     set_bin_data(&mut store, owner.as_slice(), &following)
 }
-
 
 // returns a vec of handles
 pub fn get_following<A:Api, S: Storage>(

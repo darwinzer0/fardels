@@ -3,26 +3,33 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Binary, HumanAddr, Uint128};
 use crate::viewing_key::ViewingKey;
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Fee {
+    pub commission_rate_nom: Uint128,
+    pub commission_rate_denom: Uint128,
+}
+
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
     pub admin: Option<HumanAddr>,
+    pub transaction_fee: Option<Fee>,
+
+    // query settings
+    pub max_query_page_size: Option<i32>,
 
     // fardel (public) settings
     pub max_cost: Option<Uint128>,
     pub max_public_message_len: Option<i32>,
+    pub max_tag_len: Option<i32>,
+    pub max_number_of_tags: Option<i32>,
     pub max_fardel_img_size: Option<i32>,
     // fardel (private) settings
     pub max_contents_data_len: Option<i32>,
-    // del
-    pub max_contents_text_len: Option<i32>,
-    pub max_ipfs_cid_len: Option<i32>,
-    pub max_contents_passphrase_len: Option<i32>,
  
-    // user
+    // user data settings
     pub max_handle_len: Option<i32>,
     pub max_profile_img_size: Option<i32>,
     pub max_description_len: Option<i32>,
-
 
     pub prng_seed: Binary,
 }
@@ -30,27 +37,42 @@ pub struct InitMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
+    // Admin-only functions
+    SetConstants {
+        transaction_fee: Option<Fee>,
+        max_query_page_size: Option<i32>,
+        max_cost: Option<Uint128>,
+        max_public_message_len: Option<i32>,
+        max_fardel_img_size: Option<i32>,
+        max_contents_data_len: Option<i32>,
+        padding: Option<String>,
+    },
+    ChangeAdmin {
+        admin: HumanAddr,
+        padding: Option<String>,
+    },
+    Ban {
+        handle: Option<String>,
+        address: Option<HumanAddr>,
+        padding: Option<String>,
+    },
+    Unban {
+        handle: Option<String>,
+        address: Option<HumanAddr>,
+        padding: Option<String>,
+    },
+
     // Account
     Register { 
         handle: String,
-        description: String,
-        profile_ing: Option<String>,
+        description: Option<String>,
+        img: Option<Binary>,
         padding: Option<String>,
     },
-    SetProfileThumbnailImg {
+    SetProfileImg {
         img: Binary,
+        padding: Option<String>,
     },
-    //RegisterAndGenerateViewingKey {
-    //    handle: String,
-    //    entropy: String,
-    //    padding: Option<String>,
-    //},
-    //RegisterAndSetViewingKey {
-    //    handle: String,
-    //    key: String,
-    //    padding: Option<String>,
-    //},
-
     GenerateViewingKey {
         entropy: String,
         padding: Option<String>,
@@ -62,21 +84,60 @@ pub enum HandleMsg {
     Deactivate { 
         padding: Option<String>, 
     },
+    Block {
+        handle: String,
+    },
+    Unblock {
+        handle: String,
+    },
 
     // My Fardels
     CarryFardel { 
+        /// public_message is the message that is visible prior to unpacking
         public_message: String,
-        contents_text: String,
-        ipfs_cid: String,
-        passphrase: String,
+
+        /// tags is a vector of labels used to facilitate search
+        tags: Vec<String>,
+
+        /// contents_data is a vector of private data (JSON strings) only accessible upon unpacking
+        contents_data: Vec<String>,
+
+        /// cost in uscrt
         cost: Uint128,
+
+        /// countable determines how data will be unpacked
+        ///   false: No limit on number of sales. If false, then contents_data length must be 1
+        ///   true:  Each element of contents_data vec can only be unpacked by one account.
+        ///          Once all the contents are unpacked the fardel will be sealed.
+        countable: bool,
+
+        /// approval_req means each unpacking requires approval before the transaction is completed
+        approval_req: bool,
+
+        /// img is a public thumbnail image that goes with the public_message
+        img: Option<Binary>,
+
+        /// seal_time sets an automatic timestamp for when the fardel will seal
+        seal_time: Option<i32>,
         padding: Option<String>,
     },
+    /// seals a fardel so no one can unpack it anymore
+    ///   Once a fardel has been sealed it cannot be unsealed. 
+    ///   If the owner of the fardel wants to make it available again, 
+    ///   then they need to carry a new fardel.
     SealFardel {
         fardel_id: Uint128,
     },
+    /// approves the unpacking of a fardel for a given unpacker, 
+    ///   and processes transaction if pending.
+    ApproveUnpack {
+        fardel_id: Uint128,
+        unpacker: HumanAddr,
+    },
+    // approves all pending unpacked fardels, and processes transactions
+    ApproveAllUnpacks { },
 
-    // Other fardels
+    // Other accounts and fardels
     Follow {
         handle: String,
         padding: Option<String>,
@@ -85,21 +146,44 @@ pub enum HandleMsg {
         handle: String,
         padding: Option<String>,
     },
+    // If the fardel requires approval it will be pending, 
+    //   otherwise it will unpack and process transaction immediately.
     UnpackFardel {
         fardel_id: Uint128,
         padding: Option<String>,
     },
+    // Cancels a pending unpacking and returns scrt to sender
+    CancelPending {
+        fardel_id: Uint128,
+        padding: Option<String>,
+    },
+    // Rates a fardel, rating values are defined as follows:
+    //   false - downvote
+    //   true - upvote
+    // The ratings are public, but only accounts that have unpacked the fardel can rate it. 
+    // An account can only upvote or downvote a fardel once. 
     RateFardel {
         fardel_id: Uint128,
         rating: bool,
         padding: Option<String>,
     },
+    // Removes a rating on a fardel
+    UnrateFardel {
+        fardel_id: Uint128,
+        padding: Option<String>,
+    },
+    // creates a new comment on a fardel with option to send rating at same time
     CommentOnFardel {
         fardel_id: Uint128,
         comment: String,
         rating: Option<bool>,
         padding: Option<String>,
     },
+    // deletes a comment
+    DeleteComment {
+        comment_id: Uint128,
+        padding: Option<String>,
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -110,17 +194,10 @@ pub enum HandleAnswer {
         status: ResponseStatus,
         msg: Option<String>,
     },
-    SetProfileThumbnailImg {
+    SetProfileImg {
         status: ResponseStatus,
         msg: Option<String>,
     },
-    //RegisterAndGenerateViewingKey {
-    //    status: ResponseStatus,
-    //    key: Option<ViewingKey>,
-    //},
-    //RegisterAndSetViewingKey {
-    //    status: ResponseStatus,
-    //},
     GenerateViewingKey {
         key: ViewingKey,
     },
@@ -160,43 +237,67 @@ pub enum HandleAnswer {
         status: ResponseStatus,
         msg: Option<String>,
     },
+    UnrateFardel {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
     CommentOnFardel {
         status: ResponseStatus,
         msg: Option<String>,
-    }
+    },
+    DeleteComment {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
+    // User queries
+    // Get the profile for a given handle (description, profile img)
     GetProfile {
         handle: String,
     },
+    // Get historical transaction data
+    GetTransactions {
+        address: HumanAddr,
+        key: String,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    },
+    // Get the handle for the currently logged in user
     GetHandle {
         address: HumanAddr,
         key: String,
     },
+    // Get logged in user's list of handles currently following
     GetFollowing {
         address: HumanAddr,
         key: String,
     },
+    // Check if the given handle is available
     IsHandleAvailable {
         handle: String,
     },
+
+    // Get a fardel by global id, not logged in
     GetFardelById {
         fardel_id: Uint128,
     },
+    // Get a fardel by global id, as a logged in user (with unpacked private data)
     GetFardelByIdAuth {
         address: HumanAddr,
         key: String,
         fardel_id: Uint128,
     },
-    // Get fardels for a given handle
+    // Get fardels for a given handle, not logged in
     GetFardels {
         handle: String,
         page: Option<i32>,
         page_size: Option<i32>,
     },
+    // Get fardels for a given handle, as a logged in user (with unpacked private data)
     GetFardelsAuth {
         address: HumanAddr,
         key: String,
@@ -204,7 +305,31 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
+    // Get paginated list of fardels that logged in user has unpacked
     GetUnpacked {
+        address: HumanAddr,
+        key: String,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    },
+    // Get paginated list of comments for the given fardel
+    GetComments {
+        fardel_id: Uint128,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    },
+    // Get paginated list of comments for the given fardel, as a logged in user
+    GetCommentsAuth {
+        address: HumanAddr,
+        key: String,
+        fardel_id: Uint128,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    },
+
+    // Admin-only batch get fardels by id
+    GetFardelsBatch {
+        // must match admin
         address: HumanAddr,
         key: String,
         page: Option<i32>,
@@ -216,12 +341,27 @@ impl QueryMsg {
     pub fn get_validation_params(&self) -> (Vec<&HumanAddr>, ViewingKey) {
         match self {
             Self::GetHandle { address, key } => (vec![address], ViewingKey(key.clone())),
+            Self::GetTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFollowing { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetFardelByIdAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetUnpacked { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetCommentsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetFardelsBatch { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             _ => panic!("This query type does not require authentication"),
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Comment {
+    pub text: String,
+    // if the commenter has been banned or has deleted the comment, 
+    //   then text will be "" and available will be false.
+    pub available: bool,
+    // comment id is only set if the authenticated user is the commenter
+    //   (enables deletion)
+    pub comment_id: Option<Uint128>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -229,16 +369,19 @@ pub struct FardelResponse {
     pub id: Uint128,
     pub public_message: String,
     pub cost: Uint128,
-    pub packed: bool,
-    pub has_ipfs_cid: bool,
-    pub comments: Vec<String>,
+    pub unpacked: bool,
+    pub sealed: bool,
+    pub tags: Vec<String>,
+    // returns only latest comments, use GetComments for older comments
+    pub comments: Vec<Comment>,
+    // total number of comments
+    pub number_of_comments: i32,
     pub upvotes: i32,
     pub downvotes: i32,
     pub timestamp: i32,
+    pub seal_time: Option<i32>,
     // unpacked parts
-    pub contents_text: Option<String>,
-    pub ipfs_cid: Option<String>,
-    pub passphrase: Option<String>,
+    pub contents_data: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -265,6 +408,9 @@ pub enum QueryAnswer {
     },
     GetFardels {
         fardels: Vec<FardelResponse>,
+    },
+    GetComments {
+        comments: Vec<Comment>,
     },
 
     // Authentication error
