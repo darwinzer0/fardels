@@ -89,39 +89,76 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> StdResult<HandleResponse> {
     match msg {
+        // Admin
+        HandleMsg::SetConstants { 
+            transaction_fee, max_query_page_size, max_cost, max_public_message_len,
+            max_tag_len, max_number_of_tags, max_fardel_img_size, max_contents_data_len,
+            max_handle_len, max_profile_img_size, max_description_len, ..
+        } => try_set_constants(
+            deps, env, transaction_fee, max_query_page_size, max_cost, 
+            max_public_message_len, max_tag_len, max_number_of_tags,
+            max_fardel_img_size, max_contents_data_len, max_handle_len,
+            max_profile_img_size, max_description_len
+        ),
+        HandleMsg::ChangeAdmin { admin, .. } =>
+            try_change_admin(deps, env, admin),
+        HandleMsg::Ban { handle, address, .. } =>
+            try_ban(deps, env, handle, address),
+        HandleMsg::Unban { handle, address, .. } =>
+            try_unban(deps, env, handle, address),
+
         // Account 
-        HandleMsg::Register { handle, description, .. } => 
-          try_register(deps, env, handle, description),
+        HandleMsg::Register { handle, description, img, .. } => 
+            try_register(deps, env, handle, description, img),
+        HandleMsg::SetHandle { handle, .. } =>
+            try_set_handle(deps, env, handle),
+        HandleMsg::SetDescription { description, .. } =>
+            try_set_description(deps, env, description),
         HandleMsg::SetProfileImg { img, .. } =>
-          try_set_profile_img(deps, env, img),
-        //HandleMsg::RegisterAndGenerateViewingKey { handle, entropy, .. } => 
-        //  try_register_and_generate_viewing_key(deps, env, handle, entropy),
-        //HandleMsg::RegisterAndSetViewingKey { handle, key, .. } => 
-        //  try_register_and_set_viewing_key(deps, env, handle, key),
+            try_set_profile_img(deps, env, img),
         HandleMsg::GenerateViewingKey { entropy, .. } => 
-          try_generate_viewing_key(deps, env, entropy),
+            try_generate_viewing_key(deps, env, entropy),
         HandleMsg::SetViewingKey { key, .. } => 
-          try_set_viewing_key(deps, env, key),
+            try_set_viewing_key(deps, env, key),
         HandleMsg::Deactivate { .. } => 
-          try_deactivate(deps, env),
+            try_deactivate(deps, env),
+        HandleMsg::Block { handle, .. } =>
+            try_block(deps, env, handle),
+        HandleMsg::Unblock { handle, .. } =>
+            try_unblock(deps, env, handle),
 
         // My fardels
-        HandleMsg::CarryFardel { public_message, contents_text, ipfs_cid, passphrase, cost, .. } =>
-            try_carry_fardel(deps, env, public_message, contents_text, ipfs_cid, passphrase, cost),
+        HandleMsg::CarryFardel { 
+            public_message, tags, contents_data, cost, countable, 
+            approval_req, img, seal_time, .. 
+        } => try_carry_fardel(
+            deps, env, public_message, tags, contents_data, cost,
+            countable, approval_req, img, seal_time
+        ),
         HandleMsg::SealFardel { fardel_id, .. } =>
             try_seal_fardel(deps, env, fardel_id), 
+        HandleMsg::ApproveUnpack { fardel_id, unpacker, .. } =>
+            try_approve_unpack(deps, env, fardel_id, unpacker),
+        HandleMsg::ApproveAllUnpacks { .. } =>
+            try_approve_all_unpacks(deps, env),
 
         // Other fardels
         HandleMsg::Follow { handle, .. } =>
             try_follow(deps, env, handle),
         HandleMsg::Unfollow { handle, .. } =>
             try_unfollow(deps, env, handle),
-        HandleMsg::RateFardel { fardel_id, rating, .. } => 
-            try_rate_fardel(deps, env, fardel_id, rating),
-        HandleMsg::CommentOnFardel { fardel_id, comment, rating, .. } => 
-            try_comment_on_fardel(deps, env, fardel_id, comment, rating),
         HandleMsg::UnpackFardel { fardel_id, .. } => 
             try_unpack_fardel(deps, env, fardel_id),
+        HandleMsg::CancelPending { fardel_id, .. } =>
+            try_cancel_pending(deps, env, fardel_id),
+        HandleMsg::RateFardel { fardel_id, rating, .. } => 
+            try_rate_fardel(deps, env, fardel_id, rating),
+        HandleMsg::UnrateFardel { fardel_id, .. } => 
+            try_unrate_fardel(deps, env, fardel_id),
+        HandleMsg::CommentOnFardel { fardel_id, comment, rating, .. } => 
+            try_comment_on_fardel(deps, env, fardel_id, comment, rating),
+        HandleMsg::DeleteComment { comment_id, .. } =>
+            try_delete_comment(deps, env, comment_id),
     }
 }
 
@@ -174,6 +211,8 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
                     query_get_fardels_auth(&deps, &address, handle, page, page_size),
                 QueryMsg::GetUnpacked { address, page, page_size, .. } =>
                     query_get_unpacked(&deps, &address, page, page_size),
+                QueryMsg::GetPendingUnpacks { address, page, page_size, .. } =>
+                    query_get_pending_unpacks(&deps, &address, page, page_size),
                 QueryMsg::GetCommentsAuth { address, fardel_id, page, page_size, .. } =>
                     query_get_comments_auth(&deps, &address, fardel_id, page, page_size),
                 QueryMsg::GetFardelsBatch { address, page, page_size, .. } =>

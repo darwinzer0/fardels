@@ -44,8 +44,13 @@ pub enum HandleMsg {
         max_query_page_size: Option<i32>,
         max_cost: Option<Uint128>,
         max_public_message_len: Option<i32>,
+        max_tag_len: Option<i32>,
+        max_number_of_tags: Option<i32>,
         max_fardel_img_size: Option<i32>,
         max_contents_data_len: Option<i32>,
+        max_handle_len: Option<i32>,
+        max_profile_img_size: Option<i32>,
+        max_description_len: Option<i32>,
         padding: Option<String>,
     },
     ChangeAdmin {
@@ -68,6 +73,14 @@ pub enum HandleMsg {
         handle: String,
         description: Option<String>,
         img: Option<Binary>,
+        padding: Option<String>,
+    },
+    SetHandle {
+        handle: String,
+        padding: Option<String>,
+    },
+    SetDescription {
+        description: String,
         padding: Option<String>,
     },
     SetProfileImg {
@@ -124,8 +137,8 @@ pub enum HandleMsg {
     },
     /// seals a fardel so no one can unpack it anymore
     ///   Once a fardel has been sealed it cannot be unsealed. 
-    ///   If the owner of the fardel wants to make it available again, 
-    ///   then they need to carry a new fardel.
+    ///   If the owner of the fardel wants to make the contents 
+    ///   available again, then they need to carry a new fardel.
     SealFardel {
         fardel_id: Uint128,
     },
@@ -190,8 +203,34 @@ pub enum HandleMsg {
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleAnswer {
+    // Admin
+    SetConstants {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    ChangeAdmin {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    Ban {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    Unban {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+
     // Account
     Register {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    SetHandle {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    SetDescription {
         status: ResponseStatus,
         msg: Option<String>,
     },
@@ -204,9 +243,19 @@ pub enum HandleAnswer {
     },
     SetViewingKey {
         status: ResponseStatus,
+        msg: Option<String>,
     },
     Deactivate {
         status: ResponseStatus,
+        msg: Option<String>,
+    },
+    Block {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    Unblock {
+        status: ResponseStatus,
+        msg: Option<String>,
     },
 
     // My Fardels
@@ -216,6 +265,14 @@ pub enum HandleAnswer {
         fardel_id: Option<Uint128>,
     },
     SealFardel {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    ApproveUnpack {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    ApproveAllUnpacks {
         status: ResponseStatus,
         msg: Option<String>,
     },
@@ -230,9 +287,11 @@ pub enum HandleAnswer {
     UnpackFardel {
         status: ResponseStatus,
         msg: Option<String>,
-        contents_text: Option<String>,
-        ipfs_cid: Option<String>,
-        passphrase: Option<String>,
+        contents_data: Option<String>,
+    },
+    CancelPending {
+        status: ResponseStatus,
+        msg: Option<String>,
     },
     RateFardel {
         status: ResponseStatus,
@@ -255,11 +314,40 @@ pub enum HandleAnswer {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
+    //
+    // Queries without authentication
+    //
+
     // User queries
     // Get the profile for a given handle (description, profile img)
     GetProfile {
         handle: String,
     },
+    // Check if the given handle is available
+    IsHandleAvailable {
+        handle: String,
+    },
+    // Get a fardel by global id, not logged in
+    GetFardelById {
+        fardel_id: Uint128,
+    },
+    // Get fardels for a given handle, not logged in
+    GetFardels {
+        handle: String,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    },
+    // Get paginated list of comments for the given fardel
+    GetComments {
+        fardel_id: Uint128,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    },
+
+    //
+    // Queries requiring authentication (viewing key)
+    //
+
     // Get historical transaction data
     GetTransactions {
         address: HumanAddr,
@@ -277,26 +365,11 @@ pub enum QueryMsg {
         address: HumanAddr,
         key: String,
     },
-    // Check if the given handle is available
-    IsHandleAvailable {
-        handle: String,
-    },
-
-    // Get a fardel by global id, not logged in
-    GetFardelById {
-        fardel_id: Uint128,
-    },
     // Get a fardel by global id, as a logged in user (with unpacked private data)
     GetFardelByIdAuth {
         address: HumanAddr,
         key: String,
         fardel_id: Uint128,
-    },
-    // Get fardels for a given handle, not logged in
-    GetFardels {
-        handle: String,
-        page: Option<i32>,
-        page_size: Option<i32>,
     },
     // Get fardels for a given handle, as a logged in user (with unpacked private data)
     GetFardelsAuth {
@@ -313,9 +386,10 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
-    // Get paginated list of comments for the given fardel
-    GetComments {
-        fardel_id: Uint128,
+    // Get information about pending unpacks for the currently logged in user's fardels
+    GetPendingUnpacks {
+        address: HumanAddr,
+        key: String,
         page: Option<i32>,
         page_size: Option<i32>,
     },
@@ -327,6 +401,10 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
+
+    //
+    // Queries requiring authentication, admin user only
+    //
 
     // Admin-only batch get fardels by id
     GetFardelsBatch {
@@ -347,6 +425,7 @@ impl QueryMsg {
             Self::GetFardelByIdAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetUnpacked { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetPendingUnpacks { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetCommentsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelsBatch { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             _ => panic!("This query type does not require authentication"),
