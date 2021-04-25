@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     to_binary, Api, Binary, Coin, Env, Extern, HandleResponse, Querier, 
-    CosmosMsg, BankMsg, 
+    CosmosMsg, BankMsg, HumanAddr,
     StdError, StdResult, Storage, Uint128
 };
 use crate::msg::{
@@ -9,7 +9,7 @@ use crate::msg::{
 };
 use crate::state::{Config, 
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
-    store_account, store_account_img,
+    store_account, store_account_img, store_account_ban,
     Fardel, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
     store_following, remove_following,
     get_unpacked_status_by_fardel_id, store_unpack, upvote_fardel, downvote_fardel, comment_on_fardel,
@@ -87,6 +87,73 @@ pub fn try_set_constants<S: Storage, A: Api, Q: Querier>(
         messages: vec![],
         log: vec![],
         data: Some(to_binary(&HandleAnswer::SetConstants { status: Success })?),
+    })
+}
+
+pub fn try_change_admin<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    new_admin: HumanAddr,
+) -> StdResult<HandleResponse> {
+    let mut config = Config::from_storage(&mut deps.storage);
+    let mut constants = config.constants()?;
+
+    // permission check
+    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
+        return Err(StdError::unauthorized());
+    }
+
+    constants.admin = deps.api.canonical_address(&new_admin)?;
+
+    config.set_constants(&constants);
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::ChangeAdmin { status: Success })?),
+    })
+}
+
+pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    handle: Option<String>,
+    address: Option<HumanAddr>,
+    banned: bool,
+) -> StdResult<HandleResponse> {
+    let mut status = Success;
+    let mut msg = None;
+
+    let mut config = Config::from_storage(&mut deps.storage);
+    let mut constants = config.constants()?;
+
+    // permission check
+    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
+        return Err(StdError::unauthorized());
+    }
+
+    // check if address given first
+    if address.is_some() {
+        store_account_ban(
+            &mut deps.storage, 
+            &deps.api.canonical_address(&address.unwrap())?, 
+            banned
+        );
+    } else if handle.is_some() { // otherwise use handle
+        store_account_ban(
+            &mut deps.storage,
+            &get_account_for_handle(&deps.storage, &handle)?,
+            banned
+        );
+    } else {
+        status = Failure;
+        msg = Some(String::from("No handle or address given."));
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::Ban { status, msg })?),
     })
 }
 

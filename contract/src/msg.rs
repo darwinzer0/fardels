@@ -203,7 +203,6 @@ pub enum HandleAnswer {
     },
     ChangeAdmin {
         status: ResponseStatus,
-        msg: Option<String>,
     },
     Ban {
         status: ResponseStatus,

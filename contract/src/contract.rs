@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
-    try_set_constants,
+    try_set_constants, try_change_admin, try_store_ban,
     try_register, try_set_profile_img, try_generate_viewing_key,
     try_set_viewing_key, try_deactivate, try_carry_fardel, try_seal_fardel,
     try_follow, try_unfollow, try_rate_fardel, try_comment_on_fardel,
@@ -42,7 +42,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     env: Env,
     msg: InitMsg,
 ) -> StdResult<InitResponse> {
-    let admin = deps.api.canonical_address(&(msg.admin.unwrap_or_else(|| env.message.sender)));
+    let admin = deps.api.canonical_address(&(msg.admin.unwrap_or_else(|| env.message.sender)))?;
 
     let prng_seed_hashed = sha_256(&msg.prng_seed.0);
 
@@ -107,9 +107,9 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::ChangeAdmin { admin, .. } =>
             try_change_admin(deps, env, admin),
         HandleMsg::Ban { handle, address, .. } =>
-            try_ban(deps, env, handle, address),
+            try_store_ban(deps, env, handle, address, true),
         HandleMsg::Unban { handle, address, .. } =>
-            try_unban(deps, env, handle, address),
+            try_store_ban(deps, env, handle, address, false),
 
         // Account 
         HandleMsg::Register { handle, description, img, .. } => 

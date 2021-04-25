@@ -38,6 +38,9 @@ pub const PREFIX_ACCOUNT_THUMBNAIL_IMGS: &[u8] = b"account-img";
 pub const PREFIX_HANDLES: &[u8] = b"handle";
 pub const PREFIX_VIEWING_KEY: &[u8] = b"viewingkey";
 
+// Banned accounts
+pub const PREFIX_BANNED: &[u8] = b"banned";
+
 // Transactions
 
 //
@@ -708,6 +711,27 @@ pub fn get_account_img<S: Storage>(
 ) -> StdResult<Vec<u8>> {
     let store = ReadonlyPrefixedStorage::new(PREFIX_ACCOUNT_THUMBNAIL_IMGS, store);
     get_bin_data(&store, &owner.as_slice())
+}
+
+//
+// Banned accounts
+//
+pub fn store_account_ban<S: Storage>(
+    store: &mut S,
+    account: &CanonicalAddr,
+    banned: bool,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_BANNED, store);
+    set_bin_data(&mut store, &account.as_slice(), &banned)
+}
+
+// returns true is account is banned
+pub fn is_banned<S: Storage>(
+    store: &S,
+    account: &CanonicalAddr,
+) -> bool {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_BANNED, store);
+    get_bin_data(&store, &account.as_slice()).unwrap_or_else(|_| false)
 }
 
 //
