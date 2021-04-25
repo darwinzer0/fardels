@@ -7,7 +7,7 @@ use crate::msg::{
     HandleAnswer, ResponseStatus, 
     ResponseStatus::Success, ResponseStatus::Failure, Fee,
 };
-use crate::state::{Config, 
+use crate::state::{Config, ReadonlyConfig,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img, store_account_ban,
     Fardel, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
@@ -164,10 +164,12 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     env: Env,
     handle: String,
     description: Option<String>,
+    img: Option<Binary>,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
     let description = description.unwrap_or_else(|| "".to_string());
+    let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
     let handle = handle.trim().to_owned();
@@ -187,7 +189,6 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                 msg = Some(String::from("Handle is already in use."))
             },
             Err(_) => {
-                let message_sender = deps.api.canonical_address(&env.message.sender)?;
                 // check if previously registered
                 match get_account(&mut deps.storage, &message_sender) {
                     Ok(stored_account) => {
@@ -207,6 +208,17 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                 }.into_stored(&deps.api)?;
                 map_handle_to_account(&mut deps.storage, &message_sender, handle.clone())?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
+
+                // if profile img sent store this as well
+                if img.is_some() {
+                    let img: Vec<u8> = img.unwrap().0;
+                    if img.len() as u32 > constants.max_profile_img_size {
+                        status = Failure;
+                        msg = Some(String::from("Thumbnail image is too large."));
+                    } else {
+                        store_account_img(&mut deps.storage, &message_sender, img)?;
+                    }
+                }
             }
         }        
     }
