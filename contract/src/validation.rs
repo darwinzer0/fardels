@@ -2,7 +2,13 @@ use std::convert::TryFrom;
 use cosmwasm_std::{
     StdError, StdResult,
 };
+use cosmwasm_std::{Uint128};
+use crate::msg::Fee;
 
+pub const DEFAULT_TRANSACTION_FEE: Fee = Fee {
+    commission_rate_nom: Uint128(3),
+    commission_rate_denom: Uint128(1000),
+};
 pub const DEFAULT_MAX_QUERY_PAGE_SIZE: u16 = 10_u16;
 pub const DEFAULT_MAX_PUBLIC_MESSAGE_LEN: u16 = 280_u16;
 pub const DEFAULT_MAX_TAG_LEN: u8 = 64_u8;
@@ -11,6 +17,19 @@ pub const DEFAULT_MAX_THUMBNAIL_IMG_SIZE: u32 = 65536_u32;
 pub const DEFAULT_MAX_CONTENTS_DATA_LEN: u16 = 1024_u16;
 pub const DEFAULT_MAX_HANDLE_LEN: u16 = 64_u16;
 pub const DEFAULT_MAX_DESCRIPTION_LEN: u16 = 280_u16;
+
+pub fn valid_transaction_fee(val: Option<Fee>) -> StdResult<Fee> {
+    match val {
+        Some(v) => {
+            if v.commission_rate_nom > v.commission_rate_denom {
+                Err(StdError::generic_err("invalid fee, > 100%"))
+            } else {
+                Ok(v)
+            }
+        },
+        None => Ok(DEFAULT_TRANSACTION_FEE)
+    }
+}
 
 pub fn valid_max_query_page_size(val: Option<i32>) -> StdResult<u16> {
     match val {

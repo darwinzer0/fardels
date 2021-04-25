@@ -3,12 +3,6 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Binary, HumanAddr, Uint128};
 use crate::viewing_key::ViewingKey;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Fee {
-    pub commission_rate_nom: Uint128,
-    pub commission_rate_denom: Uint128,
-}
-
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
     pub admin: Option<HumanAddr>,
@@ -206,7 +200,6 @@ pub enum HandleAnswer {
     // Admin
     SetConstants {
         status: ResponseStatus,
-        msg: Option<String>,
     },
     ChangeAdmin {
         status: ResponseStatus,
@@ -504,4 +497,10 @@ pub enum QueryAnswer {
 pub enum ResponseStatus {
     Success,
     Failure,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Fee {
+    pub commission_rate_nom: Uint128,
+    pub commission_rate_denom: Uint128,
 }

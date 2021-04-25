@@ -11,7 +11,7 @@ use crate::exec::{
     try_unpack_fardel,
 };
 use crate::msg::{
-    HandleMsg, InitMsg, QueryMsg, QueryAnswer,
+    HandleMsg, InitMsg, QueryMsg, QueryAnswer, 
 };
 use crate::query::{
     query_get_fardel_by_id, query_get_fardel_by_id_auth, query_get_fardels,

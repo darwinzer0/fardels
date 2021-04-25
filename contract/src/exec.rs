@@ -5,9 +5,9 @@ use cosmwasm_std::{
 };
 use crate::msg::{
     HandleAnswer, ResponseStatus, 
-    ResponseStatus::Success, ResponseStatus::Failure,
+    ResponseStatus::Success, ResponseStatus::Failure, Fee,
 };
-use crate::state::{ReadonlyConfig, 
+use crate::state::{Config, 
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img,
     Fardel, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
@@ -15,8 +15,74 @@ use crate::state::{ReadonlyConfig,
     get_unpacked_status_by_fardel_id, store_unpack, upvote_fardel, downvote_fardel, comment_on_fardel,
     write_viewing_key
 };
+use crate::validation::{
+    valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
+    valid_max_handle_len, valid_max_tag_len, valid_max_number_of_tags,
+    valid_max_description_len, valid_max_query_page_size,
+};
 use crate::viewing_key::{ViewingKey};
 use crate::contract::DENOM;
+
+pub fn try_set_constants<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    transaction_fee: Option<Fee>, 
+    max_query_page_size: Option<i32>, 
+    max_cost: Option<Uint128>, 
+    max_public_message_len: Option<i32>, 
+    max_tag_len: Option<i32>, 
+    max_number_of_tags: Option<i32>,
+    max_fardel_img_size: Option<i32>, 
+    max_contents_data_len: Option<i32>, 
+    max_handle_len: Option<i32>,
+    max_profile_img_size: Option<i32>, 
+    max_description_len: Option<i32>,
+) -> StdResult<HandleResponse> {
+    let mut config = Config::from_storage(&mut deps.storage);
+    let mut constants = config.constants()?;
+
+    if transaction_fee.is_some() {
+        constants.transaction_fee = transaction_fee.unwrap();
+    }
+    if max_query_page_size.is_some() {
+        constants.max_query_page_size = valid_max_query_page_size(max_query_page_size)?;
+    }
+    if max_cost.is_some() {
+        constants.max_cost = max_cost.unwrap().u128();
+    }
+    if max_public_message_len.is_some() {
+        constants.max_public_message_len = valid_max_public_message_len(max_public_message_len)?;
+    }
+    if max_tag_len.is_some() {
+        constants.max_tag_len = valid_max_tag_len(max_tag_len)?;
+    }
+    if max_number_of_tags.is_some() {
+        constants.max_number_of_tags = valid_max_number_of_tags(max_number_of_tags)?;
+    }
+    if max_fardel_img_size.is_some() {
+        constants.max_fardel_img_size = valid_max_thumbnail_img_size(max_fardel_img_size)?;
+    }
+    if max_contents_data_len.is_some() {
+        constants.max_contents_data_len = valid_max_contents_data_len(max_contents_data_len)?;
+    }
+    if max_handle_len.is_some() {
+        constants.max_handle_len = valid_max_handle_len(max_handle_len)?;
+    }
+    if max_description_len.is_some() {
+        constants.max_description_len = valid_max_description_len(max_description_len)?;
+    }
+    if max_profile_img_size.is_some() {
+        constants.max_profile_img_size = valid_max_thumbnail_img_size(max_profile_img_size)?;
+    }
+    config.set_constants(&constants);
+
+    let status = Success;
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::SetConstants { status })?),
+    })
+}
 
 pub fn try_register<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
