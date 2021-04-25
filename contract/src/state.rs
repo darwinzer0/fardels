@@ -31,6 +31,12 @@ pub const PREFIX_COMMENTS: &[u8] = b"comments";
 
 // Following
 pub const PREFIX_FOLLOWING: &[u8] = b"following";
+pub const PREFIX_FOLLOWERS: &[u8] = b"followers";
+pub const PREFIX_LINK: &[u8] = b"link";
+pub const PREFIX_VEC: &[u8] = b"vec";
+
+// Blocked
+pub const PREFIX_BLOCKED: &[u8] = b"blocked";
 
 // Accounts
 pub const PREFIX_ACCOUNTS: &[u8] = b"account";
@@ -366,14 +372,27 @@ pub fn get_sealed_status<S: Storage>(
 }
 
 //
-// Following
+// Following / Follower
 //
-// are stored as a Vec<HumanAddr>, not ideal for long following lists but quick and dirty
-// TODO: make smarter eg.
-//   b"following" | {owner canonical addr} | {appendstore index} -> {followed canonical addr}
+//   b"following" | {owner canonical addr} | b"link" | {followed canonical addr} -> v_index
+//   b"following" | {owner canonical addr} | b"vec" | {appendstore index} -> Following (active = true means following)
+//   b"followers" | {owner canonical addr} | b"link" | {follower canonical addr} -> v_index
+//   b"followers" | {owner canonical addr} | b"vec" | {appendstore index} -> Follower (active = true means follower)
 //
 // addresses are saved rather than handles, in case followed user changes handle
 //
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Following {
+    pub who: CanonicalAddr,
+    pub active: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Follower {
+    pub who: CanonicalAddr,
+    pub active: bool,
+}
 
 pub fn store_following<A: Api, S: Storage>(
     api: &A,
@@ -381,12 +400,52 @@ pub fn store_following<A: Api, S: Storage>(
     owner: &CanonicalAddr,
     handle: String,
 ) -> StdResult<()> {
-    let store = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    let mut following: Vec<HumanAddr> = get_bin_data(&store, owner.as_slice()).unwrap_or_else(|_| vec![]);
-    let followed: HumanAddr = api.human_address(&get_account_for_handle(storage, &handle)?)?;
-    following.push(followed);
-    let mut store = PrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    set_bin_data(&mut store, owner.as_slice(), &following)
+    let followed_addr = get_account_for_handle(storage, &handle)?;
+
+    // save following relation
+
+    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
+    
+    // get current idx or add to end
+    let idx: u32 = get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage.len());
+    let following = Following {
+        who: followed_addr,
+        active: true,
+    };
+    if idx == vec_storage.len() {
+        vec_storage.push(&following);
+        set_bin_data(&mut link_storage, followed_addr.as_slice(), &idx)?;
+    } else {
+        vec_storage.set_at(idx, &following)?;
+    }
+    
+    // save follower relation
+
+    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_LINK], storage);
+    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
+ 
+    let idx: u32 = get_bin_data(&link_storage, owner.as_slice()).unwrap_or_else(|_| vec_storage.len());
+    let follower = Follower {
+        who: owner.clone(),
+        active: true,
+    };
+    if idx == vec_storage.len() {
+        vec_storage.push(&follower);
+        set_bin_data(&mut link_storage, owner.as_slice(), &idx)?;
+    } else {
+        vec_storage.set_at(idx, &follower)?;
+    }
+    Ok(())
+
+    //let store = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWING, storage);
+    //let mut following: Vec<HumanAddr> = get_bin_data(&store, owner.as_slice()).unwrap_or_else(|_| vec![]);
+    //let followed: HumanAddr = api.human_address(&get_account_for_handle(storage, &handle)?)?;
+    //following.push(followed);
+    //let mut store = PrefixedStorage::new(PREFIX_FOLLOWING, storage);
+    //set_bin_data(&mut store, owner.as_slice(), &following)
 }
 
 pub fn remove_following<A: Api, S: Storage>(
@@ -395,12 +454,42 @@ pub fn remove_following<A: Api, S: Storage>(
     owner: &CanonicalAddr,
     handle: String,
 ) -> StdResult<()> {
-    let store = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    let mut following: Vec<HumanAddr> = get_bin_data(&store, owner.as_slice()).unwrap_or_else(|_| vec![]);
-    let followed: HumanAddr = api.human_address(&get_account_for_handle(storage, &handle)?)?;
-    following.retain(|x| x != &followed);
-    let mut store = PrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    set_bin_data(&mut store, owner.as_slice(), &following)
+    let followed_addr = get_account_for_handle(storage, &handle)?;
+
+    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
+
+    // update following relation, active = false
+
+    // get current idx and set to false or ignore if not following
+    let idx: u32 = get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage.len());
+    if idx < vec_storage.len() {
+        let mut following: Following = vec_storage.get_at(idx)?;
+        following.active = false;
+        vec_storage.set_at(idx, &following)?;
+    } 
+
+    // update follower relation, active = false
+
+    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_LINK], storage);
+    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
+ 
+    let idx: u32 = get_bin_data(&link_storage, owner.as_slice()).unwrap_or_else(|_| vec_storage.len());
+    if idx < vec_storage.len() {
+        let mut follower: Follower = vec_storage.get_at(idx)?;
+        follower.active = false;
+        vec_storage.set_at(idx, &follower)?;
+    } 
+    Ok(())
+
+    //let store = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWING, storage);
+    //let mut following: Vec<HumanAddr> = get_bin_data(&store, owner.as_slice()).unwrap_or_else(|_| vec![]);
+    //let followed: HumanAddr = api.human_address(&get_account_for_handle(storage, &handle)?)?;
+    //following.retain(|x| x != &followed);
+    //let mut store = PrefixedStorage::new(PREFIX_FOLLOWING, storage);
+    //set_bin_data(&mut store, owner.as_slice(), &following)
 }
 
 // returns a vec of handles
@@ -408,16 +497,69 @@ pub fn get_following<A:Api, S: Storage>(
     api: &A,
     storage: &S,
     owner: &CanonicalAddr,
+    page: u32,
+    page_size: u32,
 ) -> StdResult<Vec<String>>{
-    let store = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    let following: Vec<HumanAddr> = get_bin_data(&store, owner.as_slice()).unwrap_or_else(|_| vec![]);
-    let result = following.iter().map(|followed| {
-        let followed: CanonicalAddr = api.canonical_address(&followed).unwrap();
-        let followed_account: Account = get_account(storage, &followed).unwrap().into_humanized(api).unwrap();
-        followed_account.handle
-    }).collect();
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, owner.as_slice(), PREFIX_VEC], storage);
+
+    // Try to access the storage of following for the account.
+    // If it doesn't exist yet, return an empty list.
+    let store = if let Some(result) = AppendStore::<Following, _>::attach(&store) {
+        result?
+    } else {
+        return Ok(vec![]);
+    };
+
+    // Take `page_size` following starting from the latest following, potentially skipping `page * page_size`
+    // following from the start. Also filters non-active following.
+    let following_iter = store
+        .iter()
+        .rev()
+        .skip((page * page_size) as _)
+        .take(page_size as _);
+    let result = following_iter
+        .filter(|following| following.unwrap().active)
+        .map(|following| { 
+            let followed = following.unwrap().who;
+            let followed_account: Account = get_account(storage, &followed).unwrap().into_humanized(api).unwrap();
+            followed_account.handle
+        }).collect();
     Ok(result)
 }
+
+pub fn get_followers<A:Api, S: Storage>(
+    api: &A,
+    storage: &S,
+    owner: &CanonicalAddr,
+    page: u32,
+    page_size: u32,
+) -> StdResult<Vec<String>>{
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, owner.as_slice(), PREFIX_VEC], storage);
+
+    // Try to access the storage of followers for the account.
+    // If it doesn't exist yet, return an empty list.
+    let store = if let Some(result) = AppendStore::<Follower, _>::attach(&store) {
+        result?
+    } else {
+        return Ok(vec![]);
+    };
+
+    // Take `page_size` following starting from the latest followers, potentially skipping `page * page_size`
+    // followers from the start. Also filters non-active followers.
+    let follower_iter = store
+        .iter()
+        .rev()
+        .skip((page * page_size) as _)
+        .take(page_size as _);
+    let result = follower_iter
+        .filter(|follower| follower.unwrap().active)
+        .map(|follower| { 
+            let follower = follower.unwrap().who;
+            let follower_account: Account = get_account(storage, &follower).unwrap().into_humanized(api).unwrap();
+            follower_account.handle
+        }).collect();
+    Ok(result)
+}  
 
 //
 // Unpacked fardels
