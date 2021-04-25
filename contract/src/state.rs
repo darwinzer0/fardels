@@ -46,7 +46,7 @@ pub const PREFIX_VIEWING_KEY: &[u8] = b"viewingkey";
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct Constants {
-    pub admin: HumanAddr,
+    pub admin: CanonicalAddr,
     pub transaction_fee: Fee,
     pub max_query_page_size: u16,
 

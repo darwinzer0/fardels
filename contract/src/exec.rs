@@ -1,7 +1,7 @@
 use cosmwasm_std::{
     to_binary, Api, Binary, Coin, Env, Extern, HandleResponse, Querier, 
     CosmosMsg, BankMsg, 
-    StdResult, Storage, Uint128
+    StdError, StdResult, Storage, Uint128
 };
 use crate::msg::{
     HandleAnswer, ResponseStatus, 
@@ -23,6 +23,8 @@ use crate::validation::{
 use crate::viewing_key::{ViewingKey};
 use crate::contract::DENOM;
 
+// admin-only functions
+
 pub fn try_set_constants<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -40,6 +42,11 @@ pub fn try_set_constants<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     let mut config = Config::from_storage(&mut deps.storage);
     let mut constants = config.constants()?;
+
+    // permission check
+    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
+        return Err(StdError::unauthorized());
+    }
 
     if transaction_fee.is_some() {
         constants.transaction_fee = transaction_fee.unwrap();
@@ -76,13 +83,14 @@ pub fn try_set_constants<S: Storage, A: Api, Q: Querier>(
     }
     config.set_constants(&constants);
 
-    let status = Success;
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::SetConstants { status })?),
+        data: Some(to_binary(&HandleAnswer::SetConstants { status: Success })?),
     })
 }
+
+// all user functions
 
 pub fn try_register<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,

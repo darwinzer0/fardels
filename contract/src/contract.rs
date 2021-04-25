@@ -5,6 +5,7 @@ use cosmwasm_std::{
 };
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
+    try_set_constants,
     try_register, try_set_profile_img, try_generate_viewing_key,
     try_set_viewing_key, try_deactivate, try_carry_fardel, try_seal_fardel,
     try_follow, try_unfollow, try_rate_fardel, try_comment_on_fardel,
@@ -24,7 +25,7 @@ use crate::state::{
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
     valid_max_handle_len, valid_max_tag_len, valid_max_number_of_tags,
-    valid_max_description_len, valid_max_query_page_size,
+    valid_max_description_len, valid_max_query_page_size, valid_transaction_fee,
 };
 use crate::viewing_key::{VIEWING_KEY_SIZE};
 
@@ -41,7 +42,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     env: Env,
     msg: InitMsg,
 ) -> StdResult<InitResponse> {
-    let admin = msg.admin.unwrap_or_else(|| env.message.sender);
+    let admin = deps.api.canonical_address(&(msg.admin.unwrap_or_else(|| env.message.sender)));
 
     let prng_seed_hashed = sha_256(&msg.prng_seed.0);
 
@@ -51,6 +52,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     };
 
     // admin settings
+    let transaction_fee = valid_transaction_fee(msg.transaction_fee)?;
     let max_query_page_size = valid_max_query_page_size(msg.max_query_page_size)?;
 
     // fardel settings
@@ -68,6 +70,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     let mut config = Config::from_storage(&mut deps.storage);
     config.set_constants(&Constants {
         admin,
+        transaction_fee,
+        max_query_page_size,
         max_cost,
         max_public_message_len,
         max_tag_len,
