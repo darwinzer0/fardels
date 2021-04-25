@@ -142,7 +142,7 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
     } else if handle.is_some() { // otherwise use handle
         store_account_ban(
             &mut deps.storage,
-            &get_account_for_handle(&deps.storage, &handle)?,
+            &get_account_for_handle(&deps.storage, &handle.unwrap())?,
             banned
         );
     } else {
