@@ -352,10 +352,19 @@ pub enum QueryMsg {
         address: HumanAddr,
         key: String,
     },
-    // Get logged in user's list of handles currently following
+    // Get logged in user's list of handles they are currently following
     GetFollowing {
         address: HumanAddr,
         key: String,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    },
+    // Get logged in user's list of followers
+    GetFollowers {
+        address: HumanAddr,
+        key: String,
+        page: Option<i32>,
+        page_size: Option<i32>,
     },
     // Get a fardel by global id, as a logged in user (with unpacked private data)
     GetFardelByIdAuth {
@@ -414,6 +423,7 @@ impl QueryMsg {
             Self::GetTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetHandle { address, key } => (vec![address], ViewingKey(key.clone())),
             Self::GetFollowing { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetFollowers { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelByIdAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetUnpacked { address, key, .. } => (vec![address], ViewingKey(key.clone())),
@@ -471,6 +481,9 @@ pub enum QueryAnswer {
     },
     GetFollowing {
         following: Vec<String>,
+    },
+    GetFollowers {
+        followers: Vec<String>,
     },
     IsHandleAvailable {
         response: bool,

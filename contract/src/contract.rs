@@ -17,7 +17,7 @@ use crate::msg::{
 };
 use crate::query::{
     query_get_fardel_by_id, query_get_fardel_by_id_auth, query_get_fardels,
-    query_get_fardels_auth, query_get_following, query_get_handle,
+    query_get_fardels_auth, query_get_following, query_get_followers, query_get_handle,
     query_get_profile, query_is_handle_available,
 };
 use crate::state::{
@@ -208,8 +208,10 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
                     query_get_transactions(&deps, &address, page, page_size),
                 QueryMsg::GetHandle { address, .. } => 
                     query_get_handle(&deps, &address),
-                QueryMsg::GetFollowing { address, .. } => 
-                    query_get_following(&deps, &address),
+                QueryMsg::GetFollowing { address, page, page_size, .. } => 
+                    query_get_following(&deps, &address, page, page_size),
+                QueryMsg::GetFollowers { address, page, page_size, .. } => 
+                    query_get_followers(&deps, &address, page, page_size),
                 QueryMsg::GetFardelByIdAuth { address, fardel_id, .. } => 
                     query_get_fardel_by_id_auth(&deps, &address, fardel_id),
                 QueryMsg::GetFardelsAuth { address, handle, page, page_size, .. } =>

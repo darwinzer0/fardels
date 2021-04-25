@@ -10,7 +10,7 @@ use crate::msg::{
 use crate::state::{get_account, get_account_for_handle,
     get_account_img,
     Fardel, get_fardel_by_id, get_fardels,
-    get_following, 
+    get_following, get_followers,
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
     get_comments,
@@ -296,9 +296,23 @@ pub fn query_get_handle<S: Storage, A: Api, Q: Querier>(
 pub fn query_get_following<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account: &HumanAddr,
+    page: Option<i32>,
+    page_size: Option<i32>,
 ) -> StdResult<Binary> {
     let address = deps.api.canonical_address(account)?;
     let following: Vec<String> = get_following(&deps.api, &deps.storage, &address).unwrap_or_else(|_| vec![]);
     let response = QueryAnswer::GetFollowing { following };
+    to_binary(&response)
+}
+
+pub fn query_get_followers<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    account: &HumanAddr,
+    page: Option<i32>,
+    page_size: Option<i32>,
+) -> StdResult<Binary> {
+    //TODO: FIX
+    //let followers = vec![];
+    let response = QueryAnswer::GetFollowers { followers };
     to_binary(&response)
 }
