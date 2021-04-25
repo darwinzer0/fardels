@@ -6,7 +6,8 @@ use cosmwasm_std::{
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
     try_set_constants, try_change_admin, try_store_ban,
-    try_register, try_set_profile_img, try_generate_viewing_key,
+    try_register, try_set_handle, try_set_description,
+    try_set_profile_img, try_generate_viewing_key,
     try_set_viewing_key, try_deactivate, try_carry_fardel, try_seal_fardel,
     try_follow, try_unfollow, try_rate_fardel, try_comment_on_fardel,
     try_unpack_fardel,

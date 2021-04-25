@@ -169,7 +169,6 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
     let description = description.unwrap_or_else(|| "".to_string());
-    let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
     let handle = handle.trim().to_owned();
@@ -189,6 +188,8 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                 msg = Some(String::from("Handle is already in use."))
             },
             Err(_) => {
+                let message_sender = deps.api.canonical_address(&env.message.sender)?;
+
                 // check if previously registered
                 match get_account(&mut deps.storage, &message_sender) {
                     Ok(stored_account) => {
@@ -214,7 +215,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                     let img: Vec<u8> = img.unwrap().0;
                     if img.len() as u32 > constants.max_profile_img_size {
                         status = Failure;
-                        msg = Some(String::from("Thumbnail image is too large."));
+                        msg = Some(String::from("Account registered, but profile image is too large."));
                     } else {
                         store_account_img(&mut deps.storage, &message_sender, img)?;
                     }
@@ -227,6 +228,102 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
         messages: vec![],
         log: vec![],
         data: Some(to_binary(&HandleAnswer::Register { status, msg })?),
+    })
+}
+
+pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    handle: String,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+
+    let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+    let handle = handle.trim().to_owned();
+
+    if handle.as_bytes().len() > constants.max_handle_len.into() {
+        // if handle is too long, set status message and do nothing else
+        status = Failure;
+        msg = Some(String::from("Handle is too long."));
+    } else {
+        match get_account_for_handle(&deps.storage, &handle) {
+            Ok(_) => {
+                status = Failure;
+                msg = Some(String::from("Handle is already in use."))
+            },
+            Err(_) => {
+                let message_sender = deps.api.canonical_address(&env.message.sender)?;
+                let mut description = String::from("");
+
+                // check if previously registered
+                match get_account(&mut deps.storage, &message_sender) {
+                    Ok(stored_account) => {
+                        // yes, deactivate old handle if it is different
+                        let account = stored_account.into_humanized(&deps.api)?;
+                        let old_handle = account.handle;
+                        description = account.description;
+                        if !handle.eq(&old_handle) {
+                            delete_handle_map(&mut deps.storage, old_handle);
+                        }
+                    },
+                    _ => { }
+                }
+                let stored_account = Account {
+                    owner: env.message.sender,
+                    handle: handle.clone(),
+                    description,
+                }.into_stored(&deps.api)?;
+                map_handle_to_account(&mut deps.storage, &message_sender, handle.clone())?;
+                store_account(&mut deps.storage, stored_account, &message_sender)?;
+            }
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::SetHandle { status, msg })?),
+    })
+}
+
+pub fn try_set_description<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    description: String,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+
+    let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+
+    if description.as_bytes().len() > constants.max_description_len.into() {
+        // if description is too long, set status message and do nothing else
+        status = Failure;
+        msg = Some(String::from("Description is too long."));
+    } else {
+        let message_sender = deps.api.canonical_address(&env.message.sender)?;
+        match get_account(&mut deps.storage, &message_sender) {
+            Ok(stored_account) => {
+                let account = stored_account.into_humanized(&deps.api)?;
+                let stored_account = Account {
+                    owner: env.message.sender,
+                    handle: account.handle,
+                    description,
+                }.into_stored(&deps.api)?;
+                store_account(&mut deps.storage, stored_account, &message_sender)?;
+            },
+            _ => {
+                status = Failure;
+                msg = Some(String::from("Account has not been registered, yet."));
+            }
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::SetDescription { status, msg })?),
     })
 }
 
@@ -244,7 +341,7 @@ pub fn try_set_profile_img<S: Storage, A: Api, Q: Querier>(
     let img: Vec<u8> = img.0;
     if img.len() as u32 > constants.max_profile_img_size {
         status = Failure;
-        msg = Some(String::from("Thumbnail image is too large."));
+        msg = Some(String::from("Profile image is too large."));
     } else {
         store_account_img(&mut deps.storage, &message_sender, img)?;
     }
