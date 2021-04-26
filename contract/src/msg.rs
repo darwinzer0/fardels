@@ -261,6 +261,10 @@ pub enum HandleAnswer {
         status: ResponseStatus,
         msg: Option<String>,
     },
+    Reactivate {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
     Block {
         status: ResponseStatus,
         msg: Option<String>,

@@ -45,6 +45,7 @@ pub const PREFIX_ACCOUNTS: &[u8] = b"account";
 pub const PREFIX_ACCOUNT_THUMBNAIL_IMGS: &[u8] = b"account-img";
 pub const PREFIX_HANDLES: &[u8] = b"handle";
 pub const PREFIX_VIEWING_KEY: &[u8] = b"viewingkey";
+pub const PREFIX_DEACTIVATED: &[u8] = b"deactived";
 
 // Banned accounts
 pub const PREFIX_BANNED: &[u8] = b"banned";
@@ -378,6 +379,173 @@ pub fn get_sealed_status<S: Storage>(
 }
 
 //
+// User accounts
+//
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+pub struct Account {
+    pub owner: HumanAddr,
+    pub handle: String,
+    pub description: String,
+}
+
+impl Account {
+    pub fn into_stored<A: Api>(self, api: &A) -> StdResult<StoredAccount> {
+        let account = StoredAccount {
+            owner: api.canonical_address(&self.owner)?,
+            handle: self.handle.as_bytes().to_vec(),
+            description: self.description.as_bytes().to_vec(),
+        };
+        Ok(account)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StoredAccount {
+    pub owner: CanonicalAddr,
+    pub handle: Vec<u8>,
+    pub description: Vec<u8>,
+}
+
+impl StoredAccount {
+    pub fn into_humanized<A: Api>(self, api: &A) -> StdResult<Account> {
+        let account = Account {
+            owner: api.human_address(&self.owner)?,
+            handle: String::from_utf8(self.handle).ok().unwrap_or_default(),
+            description: String::from_utf8(self.description).ok().unwrap_or_default(),
+        };
+        Ok(account)
+    }
+}
+
+pub fn store_account<S: Storage>(
+    store: &mut S,
+    account: StoredAccount,
+    owner: &CanonicalAddr,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_ACCOUNTS, store);
+    set_bin_data(&mut store, &owner.as_slice(), &account)
+}
+
+pub fn get_account<S: Storage>(
+    store: &S,
+    owner: &CanonicalAddr,
+) -> StdResult<StoredAccount> {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_ACCOUNTS, store);
+    get_bin_data(&store, &owner.as_slice())
+}
+
+//
+// Handle to account mapping -- allows look up by handle, not address
+//
+
+pub fn map_handle_to_account<S: Storage>(
+    store: &mut S, 
+    owner: &CanonicalAddr, 
+    handle: String,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_HANDLES, store);
+    set_bin_data(&mut store, handle.as_bytes(), &owner)
+}
+
+// this is meant to be called after handle has been changed in account
+pub fn delete_handle_map<S: Storage>(
+    store: &mut S,
+    handle: String,
+) {
+    let mut store = PrefixedStorage::new(PREFIX_HANDLES, store);
+    store.remove(handle.as_bytes())
+}
+
+pub fn get_account_for_handle<S: Storage>(
+    store: &S, 
+    handle: &String
+) -> StdResult<CanonicalAddr> {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_HANDLES, store);
+    get_bin_data(&store, handle.as_bytes())
+}
+
+//
+// Account Thumbnail Img
+//
+
+// stores a thumbnail img for account in prefixed storage
+pub fn store_account_img<S: Storage>(
+    store: &mut S,
+    owner: &CanonicalAddr,
+    img: Vec<u8>,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_ACCOUNT_THUMBNAIL_IMGS, store);
+    set_bin_data(&mut store, &owner.as_slice(), &img)
+}
+
+// gets a thumbnail img for account in prefixed storage
+pub fn get_account_img<S: Storage>(
+    store: &S,
+    owner: &CanonicalAddr,
+) -> StdResult<Vec<u8>> {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_ACCOUNT_THUMBNAIL_IMGS, store);
+    get_bin_data(&store, &owner.as_slice())
+}
+
+//
+// Viewing Keys
+//
+pub fn write_viewing_key<S: Storage>(store: &mut S, owner: &CanonicalAddr, key: &ViewingKey) {
+    let mut user_key_store = PrefixedStorage::new(PREFIX_VIEWING_KEY, store);
+    user_key_store.set(owner.as_slice(), &key.to_hashed());
+}
+
+pub fn read_viewing_key<S: Storage>(store: &S, owner: &CanonicalAddr) -> Option<Vec<u8>> {
+    let user_key_store = ReadonlyPrefixedStorage::new(PREFIX_VIEWING_KEY, store);
+    user_key_store.get(owner.as_slice())
+}
+
+//
+// Deactivated accounts
+//
+
+pub fn store_account_deactivated<S: Storage>(
+    store: &mut S,
+    account: &CanonicalAddr,
+    deactivated: bool,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_DEACTIVATED, store);
+    set_bin_data(&mut store, &account.as_slice(), &deactivated)
+}
+
+// returns true is account is deactivated
+pub fn is_deactivated<S: Storage>(
+    store: &S,
+    account: &CanonicalAddr,
+) -> bool {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_DEACTIVATED, store);
+    get_bin_data(&store, &account.as_slice()).unwrap_or_else(|_| false)
+}
+
+//
+// Banned accounts
+//
+
+pub fn store_account_ban<S: Storage>(
+    store: &mut S,
+    account: &CanonicalAddr,
+    banned: bool,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_BANNED, store);
+    set_bin_data(&mut store, &account.as_slice(), &banned)
+}
+
+// returns true is account is banned
+pub fn is_banned<S: Storage>(
+    store: &S,
+    account: &CanonicalAddr,
+) -> bool {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_BANNED, store);
+    get_bin_data(&store, &account.as_slice()).unwrap_or_else(|_| false)
+}
+
+//
 // Following / Follower
 //
 //   b"following" | {owner canonical addr} | b"link" | {followed canonical addr} -> v_index
@@ -565,7 +733,34 @@ pub fn get_followers<A:Api, S: Storage>(
             follower_account.handle
         }).collect();
     Ok(result)
-}  
+}
+
+//
+// Blocked accounts
+//
+// are stored using multilevel prefixed keys:
+//     b"blocked" | {blocker canonical addr} | {blocked canonical addr} -> bool
+//
+
+pub fn store_account_block<S: Storage>(
+    storage: &mut S,
+    blocker_addr: &CanonicalAddr,
+    blocked_addr: &CanonicalAddr,
+    blocked: bool,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::multilevel(&[PREFIX_BLOCKED, blocker_addr.as_slice()], storage);
+    set_bin_data(&mut store, &blocked_addr.as_slice(), &blocked)
+}
+
+// returns true if blocked_addr is blocked by blocker_addr
+pub fn is_blocked_by<S: Storage>(
+    storage: &S,
+    blocker_addr: &CanonicalAddr,
+    blocked_addr: &CanonicalAddr,
+) -> bool {
+    let storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_BLOCKED, blocker_addr.as_slice()], storage);
+    get_bin_data(&storage, &blocked_addr.as_slice()).unwrap_or_else(|_| false)
+}
 
 //
 // Unpacked fardels
@@ -736,150 +931,6 @@ pub fn get_comments<S: Storage>(
         .map(|comment| comment)
         .collect();
     comments
-}
-
-//
-// User accounts
-//
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
-pub struct Account {
-    pub owner: HumanAddr,
-    pub handle: String,
-    pub description: String,
-}
-
-impl Account {
-    pub fn into_stored<A: Api>(self, api: &A) -> StdResult<StoredAccount> {
-        let account = StoredAccount {
-            owner: api.canonical_address(&self.owner)?,
-            handle: self.handle.as_bytes().to_vec(),
-            description: self.description.as_bytes().to_vec(),
-        };
-        Ok(account)
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct StoredAccount {
-    pub owner: CanonicalAddr,
-    pub handle: Vec<u8>,
-    pub description: Vec<u8>,
-}
-
-impl StoredAccount {
-    pub fn into_humanized<A: Api>(self, api: &A) -> StdResult<Account> {
-        let account = Account {
-            owner: api.human_address(&self.owner)?,
-            handle: String::from_utf8(self.handle).ok().unwrap_or_default(),
-            description: String::from_utf8(self.description).ok().unwrap_or_default(),
-        };
-        Ok(account)
-    }
-}
-
-pub fn store_account<S: Storage>(
-    store: &mut S,
-    account: StoredAccount,
-    owner: &CanonicalAddr,
-) -> StdResult<()> {
-    let mut store = PrefixedStorage::new(PREFIX_ACCOUNTS, store);
-    set_bin_data(&mut store, &owner.as_slice(), &account)
-}
-
-pub fn get_account<S: Storage>(
-    store: &S,
-    owner: &CanonicalAddr,
-) -> StdResult<StoredAccount> {
-    let store = ReadonlyPrefixedStorage::new(PREFIX_ACCOUNTS, store);
-    get_bin_data(&store, &owner.as_slice())
-}
-
-//
-// Handle to account mapping -- allows look up by handle, not address
-//
-
-pub fn map_handle_to_account<S: Storage>(
-    store: &mut S, 
-    owner: &CanonicalAddr, 
-    handle: String,
-) -> StdResult<()> {
-    let mut store = PrefixedStorage::new(PREFIX_HANDLES, store);
-    set_bin_data(&mut store, handle.as_bytes(), &owner)
-}
-
-// this is meant to be called after handle has been changed in account
-pub fn delete_handle_map<S: Storage>(
-    store: &mut S,
-    handle: String,
-) {
-    let mut store = PrefixedStorage::new(PREFIX_HANDLES, store);
-    store.remove(handle.as_bytes())
-}
-
-pub fn get_account_for_handle<S: Storage>(
-    store: &S, 
-    handle: &String
-) -> StdResult<CanonicalAddr> {
-    let store = ReadonlyPrefixedStorage::new(PREFIX_HANDLES, store);
-    get_bin_data(&store, handle.as_bytes())
-}
-
-
-//
-// Viewing Keys
-//
-pub fn write_viewing_key<S: Storage>(store: &mut S, owner: &CanonicalAddr, key: &ViewingKey) {
-    let mut user_key_store = PrefixedStorage::new(PREFIX_VIEWING_KEY, store);
-    user_key_store.set(owner.as_slice(), &key.to_hashed());
-}
-
-pub fn read_viewing_key<S: Storage>(store: &S, owner: &CanonicalAddr) -> Option<Vec<u8>> {
-    let user_key_store = ReadonlyPrefixedStorage::new(PREFIX_VIEWING_KEY, store);
-    user_key_store.get(owner.as_slice())
-}
-
-//
-// Account Thumbnail Img
-//
-
-// stores a thumbnail img for account in prefixed storage
-pub fn store_account_img<S: Storage>(
-    store: &mut S,
-    owner: &CanonicalAddr,
-    img: Vec<u8>,
-) -> StdResult<()> {
-    let mut store = PrefixedStorage::new(PREFIX_ACCOUNT_THUMBNAIL_IMGS, store);
-    set_bin_data(&mut store, &owner.as_slice(), &img)
-}
-
-// gets a thumbnail img for account in prefixed storage
-pub fn get_account_img<S: Storage>(
-    store: &S,
-    owner: &CanonicalAddr,
-) -> StdResult<Vec<u8>> {
-    let store = ReadonlyPrefixedStorage::new(PREFIX_ACCOUNT_THUMBNAIL_IMGS, store);
-    get_bin_data(&store, &owner.as_slice())
-}
-
-//
-// Banned accounts
-//
-pub fn store_account_ban<S: Storage>(
-    store: &mut S,
-    account: &CanonicalAddr,
-    banned: bool,
-) -> StdResult<()> {
-    let mut store = PrefixedStorage::new(PREFIX_BANNED, store);
-    set_bin_data(&mut store, &account.as_slice(), &banned)
-}
-
-// returns true is account is banned
-pub fn is_banned<S: Storage>(
-    store: &S,
-    account: &CanonicalAddr,
-) -> bool {
-    let store = ReadonlyPrefixedStorage::new(PREFIX_BANNED, store);
-    get_bin_data(&store, &account.as_slice()).unwrap_or_else(|_| false)
 }
 
 //

@@ -12,7 +12,9 @@ use crate::state::{Config, ReadonlyConfig,
     store_account, store_account_img, store_account_ban,
     Fardel, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
     store_following, remove_following,
-    get_unpacked_status_by_fardel_id, store_unpack, upvote_fardel, downvote_fardel, comment_on_fardel,
+    store_account_deactivated,
+    get_unpacked_status_by_fardel_id, store_unpack, 
+    upvote_fardel, downvote_fardel, comment_on_fardel,
     write_viewing_key, get_commission_balance,
 };
 use crate::validation::{
@@ -150,11 +152,19 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
         msg = Some(String::from("No handle or address given."));
     }
 
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::Ban { status, msg })?),
-    })
+    if banned {
+        Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::Ban { status, msg })?),
+        })
+    } else {
+        Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::Unban { status, msg })?),
+        })
+    }
 }
 
 pub fn try_draw_commission<S: Storage, A: Api, Q: Querier>(
@@ -212,7 +222,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
-    let description = description.unwrap_or_else(|| "".to_string());
+    let description = description.unwrap_or_else(|| String::from(""));
 
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
     let handle = handle.trim().to_owned();
@@ -425,17 +435,26 @@ pub fn try_set_viewing_key<S: Storage, A: Api, Q: Querier>(
     env: Env,
     key: String,
 ) -> StdResult<HandleResponse> {
-    let vk = ViewingKey(key);
+    let mut status = Success;
+    let mut msg = None;
 
-    let message_sender = deps.api.canonical_address(&env.message.sender)?;
+    if key.as_bytes().len() < 8 {
+        status = Failure;
+        msg = Some(String::from("Key is too short."));
+    } else {
+        let vk = ViewingKey(key);
 
-    write_viewing_key(&mut deps.storage, &message_sender, &vk);
+        let message_sender = deps.api.canonical_address(&env.message.sender)?;
+
+        write_viewing_key(&mut deps.storage, &message_sender, &vk);
+    }
 
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
         data: Some(to_binary(&HandleAnswer::SetViewingKey { 
-            status: Success,
+            status,
+            msg,
         })?),
     })
 }
@@ -443,13 +462,28 @@ pub fn try_set_viewing_key<S: Storage, A: Api, Q: Querier>(
 pub fn try_deactivate<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
+    deactivated: bool,
 ) -> StdResult<HandleResponse> {
-    //TODO
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::Deactivate { status: Success })?),
-    })
+    let mut status = Success;
+    let mut msg = None;
+
+    let message_sender = deps.api.canonical_address(&env.message.sender)?;
+
+    store_account_deactivated(&mut deps.storage, &message_sender, deactivated)?;
+
+    if deactivated {
+        Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::Deactivate { status, msg })?),
+        })
+    } else {
+        Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::Reactivate { status, msg })?),
+        })
+    }
 }
 
 pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(

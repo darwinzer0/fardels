@@ -95,7 +95,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     match msg {
         // Admin
-        HandleMsg::SetConstants { 
+        HandleMsg::SetConstants { //
             transaction_fee, max_query_page_size, max_cost, max_public_message_len,
             max_tag_len, max_number_of_tags, max_fardel_img_size, max_contents_data_len,
             max_handle_len, max_profile_img_size, max_description_len, ..
@@ -105,32 +105,32 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             max_fardel_img_size, max_contents_data_len, max_handle_len,
             max_profile_img_size, max_description_len
         ),
-        HandleMsg::ChangeAdmin { admin, .. } =>
+        HandleMsg::ChangeAdmin { admin, .. } => //
             try_change_admin(deps, env, admin),
-        HandleMsg::Ban { handle, address, .. } =>
+        HandleMsg::Ban { handle, address, .. } => //
             try_store_ban(deps, env, handle, address, true),
-        HandleMsg::Unban { handle, address, .. } =>
+        HandleMsg::Unban { handle, address, .. } => //
             try_store_ban(deps, env, handle, address, false),
-        HandleMsg::DrawCommission { address, amount, .. } =>
+        HandleMsg::DrawCommission { address, amount, .. } => //
             try_draw_commission(deps, env, address, amount),
 
         // Account 
-        HandleMsg::Register { handle, description, img, .. } => 
+        HandleMsg::Register { handle, description, img, .. } => // 
             try_register(deps, env, handle, description, img),
-        HandleMsg::SetHandle { handle, .. } =>
+        HandleMsg::SetHandle { handle, .. } => //
             try_set_handle(deps, env, handle),
-        HandleMsg::SetDescription { description, .. } =>
+        HandleMsg::SetDescription { description, .. } => //
             try_set_description(deps, env, description),
-        HandleMsg::SetProfileImg { img, .. } =>
+        HandleMsg::SetProfileImg { img, .. } => //
             try_set_profile_img(deps, env, img),
-        HandleMsg::GenerateViewingKey { entropy, .. } => 
+        HandleMsg::GenerateViewingKey { entropy, .. } =>  //
             try_generate_viewing_key(deps, env, entropy),
-        HandleMsg::SetViewingKey { key, .. } => 
+        HandleMsg::SetViewingKey { key, .. } =>  //
             try_set_viewing_key(deps, env, key),
         HandleMsg::Deactivate { .. } => 
-            try_deactivate(deps, env),
+            try_deactivate(deps, env, true),
         HandleMsg::Reactivate { .. } =>
-            try_reactivate(deps, env),
+            try_deactivate(deps, env, false),
         HandleMsg::Block { handle, .. } =>
             try_block(deps, env, handle),
         HandleMsg::Unblock { handle, .. } =>
