@@ -18,6 +18,7 @@ pub const KEY_COMMISSION_BALANCE: &[u8] = b"commission";
 
 // Fardel
 pub const PREFIX_FARDELS: &[u8] = b"fardel";
+pub const PREFIX_FARDEL_THUMBNAIL_IMGS: &[u8] = b"fardel-img";
 pub const PREFIX_ID_FARDEL_MAPPINGS: &[u8] = b"id-to-fardel";
 pub const PREFIX_SEALED: &[u8] = b"sealed";
 
@@ -48,7 +49,11 @@ pub const PREFIX_VIEWING_KEY: &[u8] = b"viewingkey";
 // Banned accounts
 pub const PREFIX_BANNED: &[u8] = b"banned";
 
-// Transactions
+// Pending transactions
+pub const PREFIX_PENDING_TX: &[u8] = b"pending-tx";
+
+// Completed transactions
+pub const PREFIX_COMPLETED_TX: &[u8] = b"tx";
 
 //
 // CONFIG

@@ -13,7 +13,7 @@ use crate::state::{Config, ReadonlyConfig,
     Fardel, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
     store_following, remove_following,
     get_unpacked_status_by_fardel_id, store_unpack, upvote_fardel, downvote_fardel, comment_on_fardel,
-    write_viewing_key
+    write_viewing_key, get_commission_balance,
 };
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
@@ -174,10 +174,30 @@ pub fn try_draw_commission<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::unauthorized());
     }
 
+    let address = match address {
+        Some(a) => a,
+        None => deps.api.human_address(&constants.admin)?,
+    };
+
+    let amount = match amount {
+        Some(a) => a.u128(),
+        None => get_commission_balance(&deps.storage),
+    };
+
+    let mut messages: Vec<CosmosMsg> = vec![];
+    messages.push(CosmosMsg::Bank(BankMsg::Send {
+        from_address: env.contract.address.clone(),
+        to_address: address,
+        amount: vec![Coin {
+            denom: DENOM.to_string(),
+            amount: Uint128(amount),
+        }],
+    }));
+
     Ok(HandleResponse {
-        messages: vec![],
+        messages,
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::DrawCommission { status, msg, amount, address })?),
+        data: Some(to_binary(&HandleAnswer::DrawCommission { status, msg, amount: Uint128(amount), address })?),
     })
 }
 
