@@ -61,6 +61,11 @@ pub enum HandleMsg {
         address: Option<HumanAddr>,
         padding: Option<String>,
     },
+    DrawCommission {
+        address: Option<HumanAddr>,
+        amount: Option<Uint128>,
+        padding: Option<String>,
+    },
 
     // Account
     Register { 
@@ -92,11 +97,16 @@ pub enum HandleMsg {
     Deactivate { 
         padding: Option<String>, 
     },
+    Reactivate {
+        padding: Option<String>,
+    },
     Block {
         handle: String,
+        padding: Option<String>,
     },
     Unblock {
         handle: String,
+        padding: Option<String>,
     },
 
     // My Fardels
@@ -135,15 +145,19 @@ pub enum HandleMsg {
     ///   available again, then they need to carry a new fardel.
     SealFardel {
         fardel_id: Uint128,
+        padding: Option<String>,
     },
     /// approves the unpacking of a fardel for a given unpacker, 
     ///   and processes transaction if pending.
     ApproveUnpack {
         fardel_id: Uint128,
         unpacker: HumanAddr,
+        padding: Option<String>,
     },
     // approves all pending unpacked fardels, and processes transactions
-    ApproveAllUnpacks { },
+    ApproveAllUnpacks { 
+        padding: Option<String>,
+    },
 
     // Other accounts and fardels
     Follow {
@@ -203,6 +217,12 @@ pub enum HandleAnswer {
     },
     ChangeAdmin {
         status: ResponseStatus,
+    },
+    DrawCommission {
+        status: ResponseStatus,
+        address: HumanAddr,
+        amount: Uint128,
+        msg: Option<String>,
     },
     Ban {
         status: ResponseStatus,

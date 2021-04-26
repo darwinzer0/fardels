@@ -157,6 +157,30 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+pub fn try_draw_commission<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    address: Option<HumanAddr>,
+    amount: Option<Uint128>,
+) -> StdResult<HandleResponse> {
+    let mut status = Success;
+    let mut msg = None;
+
+    let mut config = Config::from_storage(&mut deps.storage);
+    let mut constants = config.constants()?;
+
+    // permission check
+    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
+        return Err(StdError::unauthorized());
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::DrawCommission { status, msg, amount, address })?),
+    })
+}
+
 // all user functions
 
 pub fn try_register<S: Storage, A: Api, Q: Querier>(

@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
-    try_set_constants, try_change_admin, try_store_ban,
+    try_set_constants, try_change_admin, try_store_ban, try_draw_commission,
     try_register, try_set_handle, try_set_description,
     try_set_profile_img, try_generate_viewing_key,
     try_set_viewing_key, try_deactivate, try_carry_fardel, try_seal_fardel,
@@ -111,6 +111,8 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             try_store_ban(deps, env, handle, address, true),
         HandleMsg::Unban { handle, address, .. } =>
             try_store_ban(deps, env, handle, address, false),
+        HandleMsg::DrawCommission { address, amount, .. } =>
+            try_draw_commission(deps, env, address, amount),
 
         // Account 
         HandleMsg::Register { handle, description, img, .. } => 
@@ -127,6 +129,8 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             try_set_viewing_key(deps, env, key),
         HandleMsg::Deactivate { .. } => 
             try_deactivate(deps, env),
+        HandleMsg::Reactivate { .. } =>
+            try_reactivate(deps, env),
         HandleMsg::Block { handle, .. } =>
             try_block(deps, env, handle),
         HandleMsg::Unblock { handle, .. } =>
