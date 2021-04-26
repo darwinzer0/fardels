@@ -9,7 +9,7 @@ use crate::msg::{
 };
 use crate::state::{Config, ReadonlyConfig,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
-    store_account, store_account_img, store_account_ban,
+    store_account, store_account_img, store_account_ban, store_account_block,
     Fardel, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
     store_following, remove_following,
     store_account_deactivated,
@@ -247,7 +247,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                 // check if previously registered
                 match get_account(&mut deps.storage, &message_sender) {
                     Ok(stored_account) => {
-                        // yes, deactivate old handle if it is different
+                        // yes, delete old handle if it is different
                         let account = stored_account.into_humanized(&deps.api)?;
                         let old_handle = account.handle;
                         if !handle.eq(&old_handle) {
@@ -313,7 +313,7 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
                 // check if previously registered
                 match get_account(&mut deps.storage, &message_sender) {
                     Ok(stored_account) => {
-                        // yes, deactivate old handle if it is different
+                        // yes, delete old handle if it is different
                         let account = stored_account.into_humanized(&deps.api)?;
                         let old_handle = account.handle;
                         description = account.description;
@@ -459,7 +459,7 @@ pub fn try_set_viewing_key<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-pub fn try_deactivate<S: Storage, A: Api, Q: Querier>(
+pub fn try_store_deactivate<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     deactivated: bool,
@@ -482,6 +482,41 @@ pub fn try_deactivate<S: Storage, A: Api, Q: Querier>(
             messages: vec![],
             log: vec![],
             data: Some(to_binary(&HandleAnswer::Reactivate { status, msg })?),
+        })
+    }
+}
+
+pub fn try_store_block<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    handle: String,
+    block: bool,
+) -> StdResult<HandleResponse> {
+    let mut status = Success;
+    let mut msg = None;
+
+    let blocker = deps.api.canonical_address(&env.message.sender)?;
+    match get_account_for_handle(&deps.storage, &handle) {
+        Ok(blocked) => {
+            store_account_block(&mut deps.storage, &blocker, &blocked, block)?;
+        },
+        _ => {
+            status = Failure;
+            msg = Some(String::from("Handle not in use."));
+        },
+    }
+
+    if block {
+        Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::Block { status, msg })?),
+        })
+    } else {
+        Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::Unblock { status, msg })?),
         })
     }
 }

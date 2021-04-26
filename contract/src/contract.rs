@@ -8,7 +8,8 @@ use crate::exec::{
     try_set_constants, try_change_admin, try_store_ban, try_draw_commission,
     try_register, try_set_handle, try_set_description,
     try_set_profile_img, try_generate_viewing_key,
-    try_set_viewing_key, try_deactivate, try_carry_fardel, try_seal_fardel,
+    try_set_viewing_key, try_store_deactivate, try_store_block,
+    try_carry_fardel, try_seal_fardel,
     try_follow, try_unfollow, try_rate_fardel, try_comment_on_fardel,
     try_unpack_fardel,
 };
@@ -128,13 +129,13 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::SetViewingKey { key, .. } =>  //
             try_set_viewing_key(deps, env, key),
         HandleMsg::Deactivate { .. } => 
-            try_deactivate(deps, env, true),
+            try_store_deactivate(deps, env, true),
         HandleMsg::Reactivate { .. } =>
-            try_deactivate(deps, env, false),
+            try_store_deactivate(deps, env, false),
         HandleMsg::Block { handle, .. } =>
-            try_block(deps, env, handle),
+            try_store_block(deps, env, handle, true),
         HandleMsg::Unblock { handle, .. } =>
-            try_unblock(deps, env, handle),
+            try_store_block(deps, env, handle, false),
 
         // My fardels
         HandleMsg::CarryFardel { 
