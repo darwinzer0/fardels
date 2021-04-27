@@ -138,7 +138,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             try_store_block(deps, env, handle, false),
 
         // My fardels
-        HandleMsg::CarryFardel { 
+        HandleMsg::CarryFardel {
             public_message, tags, contents_data, cost, countable, 
             approval_req, img, seal_time, .. 
         } => try_carry_fardel(

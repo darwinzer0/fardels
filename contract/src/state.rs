@@ -174,25 +174,46 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
 pub struct Fardel {
     pub global_id: Uint128,
     pub public_message: String,
-    pub contents_text: String,
-    pub ipfs_cid: String,
-    pub passphrase: String,
+    pub tags: Vec<String>,
+    pub contents_data: Vec<String>,
     pub cost: Coin,
+    pub countable: bool,
+    pub approval_req: bool,
+    pub next_package: u16,
+    pub seal_time: u64,
     pub timestamp: u64,
 }
 
 impl Fardel {
     pub fn into_stored(self) -> StdResult<StoredFardel> {
+        let stored_tags = self.tags.iter().map(|tag|
+            tag.as_bytes().to_vec()
+        ).collect();
+        let stored_contents_data = self.contents_data.iter().map(|package|
+            package.as_bytes().to_vec()
+        ).collect();
         let fardel = StoredFardel {
             global_id: self.global_id.u128(),
             public_message: self.public_message.as_bytes().to_vec(),
-            contents_text: self.contents_text.as_bytes().to_vec(),
-            ipfs_cid: self.ipfs_cid.as_bytes().to_vec(),
-            passphrase: self.passphrase.as_bytes().to_vec(),
+            tags: stored_tags,
+            contents_data: stored_contents_data,
             cost: self.cost.amount.u128(),
+            countable: self.countable,
+            approval_req: self.approval_req,
+            next_package: self.next_package,
+            seal_time: self.seal_time,
             timestamp: self.timestamp,
         };
         Ok(fardel)
+    }
+
+    pub fn number_of_packages(self) -> u16 {
+        self.contents_data.len() as u16
+    }
+
+    pub fn number_of_packages_left(self) -> u16 {
+        let total = self.contents_data.len() as u16;
+        0_u16.min(total - self.next_package)
     }
 }
 
@@ -200,25 +221,46 @@ impl Fardel {
 pub struct StoredFardel {
     pub global_id: u128,
     pub public_message: Vec<u8>,
-    pub contents_text: Vec<u8>,
-    pub ipfs_cid: Vec<u8>,
-    pub passphrase: Vec<u8>,
+    pub tags: Vec<Vec<u8>>,
+    pub contents_data: Vec<Vec<u8>>,
     pub cost: u128,
+    pub countable: bool,
+    pub approval_req: bool,
+    pub next_package: u16,
+    pub seal_time: u64,
     pub timestamp: u64,
 }
 
 impl StoredFardel {
     pub fn into_humanized(self) -> StdResult<Fardel> {
+        let humanized_tags = self.tags.iter().map(|tag|
+            String::from_utf8(tag.clone()).ok().unwrap_or_default()
+        ).collect();
+        let humanized_contents_data = self.contents_data.iter().map(|package|
+            String::from_utf8(package.clone()).ok().unwrap_or_default()
+        ).collect();
         let fardel = Fardel {
             global_id: Uint128(self.global_id),
             public_message: String::from_utf8(self.public_message).ok().unwrap_or_default(),
-            contents_text: String::from_utf8(self.contents_text).ok().unwrap_or_default(),
-            ipfs_cid: String::from_utf8(self.ipfs_cid).ok().unwrap_or_default(),
-            passphrase: String::from_utf8(self.passphrase).ok().unwrap_or_default(),
+            tags: humanized_tags,
+            contents_data: humanized_contents_data,
             cost: Coin { amount: Uint128(self.cost), denom: DENOM.to_string() },
+            countable: self.countable,
+            approval_req: self.approval_req,
+            next_package: self.next_package,
+            seal_time: self.seal_time,
             timestamp: self.timestamp,
         };
         Ok(fardel)
+    }
+
+    pub fn number_of_packages(self) -> u16 {
+        self.contents_data.len() as u16
+    }
+
+    pub fn number_of_packages_left(self) -> u16 {
+        let total = self.contents_data.len() as u16;
+        0_u16.min(total - self.next_package)
     }
 }
 

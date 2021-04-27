@@ -521,14 +521,18 @@ pub fn try_store_block<S: Storage, A: Api, Q: Querier>(
     }
 }
 
+// carry a new fardel to the network
 pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     public_message: String,
-    contents_text: String,
-    ipfs_cid: String,
-    passphrase: String,
+    tags: Vec<String>,
+    contents_data: Vec<String>,
     cost: Uint128,
+    countable: bool,
+    approval_req: bool,
+    img: Option<Binary>,
+    seal_time: Option<i32>,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
@@ -536,13 +540,33 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
 
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
 
-    if (public_message.as_bytes().len() > constants.max_public_message_len.into()) ||
-       (contents_text.as_bytes().len() > constants.max_contents_text_len.into()) ||
-       (ipfs_cid.as_bytes().len() > constants.max_ipfs_cid_len.into()) ||
-       (passphrase.as_bytes().len() > constants.max_contents_passphrase_len.into()) ||
+    let mut tag_size_ok = true;
+    for tag in tags {
+        if tag.as_bytes().len() > constants.max_tag_len.into() {
+            tag_size_ok = false;
+            break;
+        }
+    }
+
+    let mut img_size_ok = true;
+    // if fardel img sent check size
+    if img.is_some() {
+        let img: Vec<u8> = img.unwrap().0;
+        if img.len() as u32 > constants.max_fardel_img_size {
+            img_size_ok = false;
+        } 
+    }
+
+    let contents_data_size = contents_data.iter().fold(0_usize, |acc, x| acc + x.as_bytes().len());
+
+    if !tag_size_ok ||
+       !img_size_ok ||
+       (public_message.as_bytes().len() > constants.max_public_message_len.into()) ||
+       (tags.len() > constants.max_number_of_tags.into()) || 
+       (contents_data_size > constants.max_contents_data_len.into()) ||
        (cost.u128() > constants.max_cost) {
         status = Failure;
-        msg = Some(String::from("Invalid Fardel data"));
+        msg = Some(String::from("Invalid fardel data"));
     } else {
         let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
