@@ -309,6 +309,7 @@ pub fn store_fardel<S: Storage>(
 
     let index = append_fardel(store, &owner, fardel.clone())?;
     map_global_id_to_fardel(store, global_id, &owner, index)?;
+    map_hash_id_to_global_id(store, hash_id, global_id)?;
     // automatically unpack for the owner
     store_unpack(store, &owner, global_id)?;
     Ok(())
