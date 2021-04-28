@@ -393,6 +393,15 @@ pub fn get_fardel_by_hash<S: ReadonlyStorage>(
     get_fardel_by_id(&storage, global_id)
 }
 
+pub fn get_fardel_owner_by_hash<S: ReadonlyStorage>(
+    storage: &S,
+    hash: u128,
+) -> StdResult<CanonicalAddr> {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, storage);
+    let global_id: u128 = get_bin_data(&store, &hash.to_be_bytes())?;
+    get_fardel_owner(storage, global_id)
+}
+
 pub fn get_fardels<S: ReadonlyStorage>(
     storage: &S,
     owner: &CanonicalAddr,
@@ -447,6 +456,7 @@ pub fn unseal_fardel<S: Storage>(
 }
 
 // get sealed status of a given fardel
+//  true means sealed, false means not sealed
 pub fn get_sealed_status<S: Storage>(
     store: &S, 
     fardel_id: u128,

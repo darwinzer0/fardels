@@ -100,11 +100,21 @@ pub enum HandleMsg {
     Reactivate {
         padding: Option<String>,
     },
+
+    // Other accounts
     Block {
         handle: String,
         padding: Option<String>,
     },
     Unblock {
+        handle: String,
+        padding: Option<String>,
+    },
+    Follow {
+        handle: String,
+        padding: Option<String>,
+    },
+    Unfollow {
         handle: String,
         padding: Option<String>,
     },
@@ -159,15 +169,8 @@ pub enum HandleMsg {
         padding: Option<String>,
     },
 
-    // Other accounts and fardels
-    Follow {
-        handle: String,
-        padding: Option<String>,
-    },
-    Unfollow {
-        handle: String,
-        padding: Option<String>,
-    },
+    // Other fardels
+
     // If the fardel requires approval it will be pending, 
     //   otherwise it will unpack and process transaction immediately.
     UnpackFardel {
@@ -265,6 +268,8 @@ pub enum HandleAnswer {
         status: ResponseStatus,
         msg: Option<String>,
     },
+
+    // Other accounts
     Block {
         status: ResponseStatus,
         msg: Option<String>,
@@ -272,6 +277,12 @@ pub enum HandleAnswer {
     Unblock {
         status: ResponseStatus,
         msg: Option<String>,
+    },
+    Follow {
+        status: ResponseStatus,
+    },
+    Unfollow {
+        status: ResponseStatus,
     },
 
     // My Fardels
@@ -294,12 +305,6 @@ pub enum HandleAnswer {
     },
 
     // Other Fardels
-    Follow {
-        status: ResponseStatus,
-    },
-    Unfollow {
-        status: ResponseStatus,
-    },
     UnpackFardel {
         status: ResponseStatus,
         msg: Option<String>,

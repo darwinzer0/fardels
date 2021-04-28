@@ -1,7 +1,7 @@
 use cosmwasm_std::{
     to_binary, Api, Env, Extern, HandleResponse,
     InitResponse, Querier, 
-    StdResult, Storage, QueryResult, 
+    StdResult, Storage, QueryResult, StdError,
 };
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
@@ -22,7 +22,7 @@ use crate::query::{
     query_get_profile, query_is_handle_available,
 };
 use crate::state::{
-    Config, Constants, read_viewing_key,
+    Config, Constants, read_viewing_key, is_banned,
 };
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
@@ -94,6 +94,15 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     env: Env,
     msg: HandleMsg,
 ) -> StdResult<HandleResponse> {
+
+    // permission check to make sure not banned (admin cannot be banned accidentally)
+    let constants = Config::from_storage(&mut deps.storage).constants()?;
+    let sender = deps.api.canonical_address(&env.message.sender)?;
+    if (sender != constants.admin) && 
+       (is_banned(&deps.storage, &sender)) {
+        return Err(StdError::unauthorized());
+    }
+
     match msg {
         // Admin
         HandleMsg::SetConstants { //
@@ -132,10 +141,16 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             try_store_deactivate(deps, env, true),
         HandleMsg::Reactivate { .. } =>
             try_store_deactivate(deps, env, false),
+
+        // Other accounts
         HandleMsg::Block { handle, .. } =>
             try_store_block(deps, env, handle, true),
         HandleMsg::Unblock { handle, .. } =>
             try_store_block(deps, env, handle, false),
+        HandleMsg::Follow { handle, .. } =>
+            try_follow(deps, env, handle),
+        HandleMsg::Unfollow { handle, .. } =>
+            try_unfollow(deps, env, handle),
 
         // My fardels
         HandleMsg::CarryFardel {
@@ -153,10 +168,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             try_approve_all_unpacks(deps, env),
 
         // Other fardels
-        HandleMsg::Follow { handle, .. } =>
-            try_follow(deps, env, handle),
-        HandleMsg::Unfollow { handle, .. } =>
-            try_unfollow(deps, env, handle),
         HandleMsg::UnpackFardel { fardel_id, .. } => 
             try_unpack_fardel(deps, env, fardel_id),
         HandleMsg::CancelPending { fardel_id, .. } =>
@@ -207,6 +218,13 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
             // in a way which will allow to time the command and determine if a viewing key doesn't exist
             key.check_viewing_key(&[0u8; VIEWING_KEY_SIZE]);
         } else if key.check_viewing_key(expected_key.unwrap().as_slice()) {
+
+            // permission check to make sure not banned (admin cannot be banned accidentally)
+            let constants = Config::from_storage(&mut deps.storage).constants()?;
+            if (canonical_addr != constants.admin) && (is_banned(&deps.storage, &canonical_addr)) {
+                return Err(StdError::unauthorized());
+            }
+
             return match msg {
                 // Base
                 QueryMsg::GetTransactions { address, page, page_size, .. } => 

@@ -11,12 +11,13 @@ use crate::msg::{
 use crate::state::{Config, ReadonlyConfig,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img, store_account_ban, store_account_block,
-    Fardel, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
+    Fardel, get_fardel_by_id, get_fardel_by_hash, get_fardel_owner, seal_fardel, store_fardel, 
     store_following, remove_following,
     store_account_deactivated,
-    get_unpacked_status_by_fardel_id, store_unpack, 
+    get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
     upvote_fardel, downvote_fardel, comment_on_fardel,
     write_viewing_key, get_commission_balance,
+    is_blocked_by,
 };
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
@@ -522,6 +523,40 @@ pub fn try_store_block<S: Storage, A: Api, Q: Querier>(
     }
 }
 
+pub fn try_follow<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    handle: String,
+) -> StdResult<HandleResponse> {
+    let message_sender = deps.api.canonical_address(&env.message.sender)?;
+    store_following(&deps.api, &mut deps.storage, &message_sender, handle)?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::Follow { 
+            status: Success,
+        })?),
+    })
+}
+
+pub fn try_unfollow<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    handle: String,
+) -> StdResult<HandleResponse> {
+    let message_sender = deps.api.canonical_address(&env.message.sender)?;
+    remove_following(&deps.api, &mut deps.storage, &message_sender, handle)?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::Follow { 
+            status: Success,
+        })?),
+    })
+}
+
 // carry a new fardel to the network
 pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -566,7 +601,12 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
        (public_message.as_bytes().len() > constants.max_public_message_len.into()) ||
        (tags.len() > constants.max_number_of_tags.into()) || 
        (contents_data_size > constants.max_contents_data_len.into()) ||
-       (cost.u128() > constants.max_cost) {
+       (cost.u128() > constants.max_cost) ||
+       (contents_data.len() == 0) {
+        status = Failure;
+        msg = Some(String::from("Invalid fardel data"));
+    } else if !countable && contents_data.len() != 1 {
+        // non-countable fardels can only have one package
         status = Failure;
         msg = Some(String::from("Invalid fardel data"));
     } else {
@@ -575,8 +615,6 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
         let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
         // generate fardel hash id using xx3h
-        //let unique = false;
-        //let mut c = 1_u64;
 
         let hash_data_len = 8 + 16 + 16 + env.message.sender.len() + public_message.as_bytes().len();
         let mut hash_data = Vec::with_capacity(hash_data_len);
@@ -589,7 +627,6 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
 
         // make sure unique (probably overkill!)
         // TODO? 50% of collision with 19 quintillion fardels :)
-        //unique = true
 
         let fardel = Fardel {
             // global_id will be overwritten in store_fardel, just a placeholder
@@ -639,7 +676,7 @@ pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
     let mut msg: Option<String> = None;
     let fardel_id = fardel_id.u128();
 
-    match get_fardel_by_id(&deps.storage, fardel_id) {
+    match get_fardel_by_hash(&deps.storage, fardel_id) {
         Ok(_) => {
             let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
             if owner.eq(&env.message.sender) {
@@ -665,36 +702,111 @@ pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-pub fn try_follow<S: Storage, A: Api, Q: Querier>(
+pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    handle: String,
+    fardel_id: Uint128,
 ) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+    let mut contents_data: Option<String> = None;
+    let mut cost: u128 = 0;
+    let fardel_id = fardel_id.u128();
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    store_following(&deps.api, &mut deps.storage, &message_sender, handle)?;
+
+    let sent_coins = env.message.sent_funds;
+    if sent_coins[0].denom != DENOM {
+        status = Failure;
+        msg = Some(String::from("Wrong denomination."))
+    } else {
+        let fardel = get_fardel_by_hash(&deps.storage, fardel_id);
+        match fardel {
+            Ok(fardel) => {
+                match fardel {
+                    Some(f) => {
+
+                        cost = f.cost.amount.u128();
+                        let sent_amount: u128 = sent_coins[0].amount.u128();
+                        let global_id = f.global_id.u128();
+
+                        // Check if sender is blocked by fardel owner
+                        let owner = get_fardel_owner(&deps.storage, global_id)?;
+                        if is_blocked_by(&deps.storage, &owner, &message_sender) {
+                            return Err(StdError::unauthorized());
+                        }
+
+                        // 1. check cost is correct
+                        if sent_amount != cost {
+                            status = Failure;
+                            msg = Some(String::from("Didn't send correct amount of coins to unpack."));
+                        // 2. check it has not already been unpacked by the user
+                        } else if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id) {
+                            status = Failure;
+                            msg = Some(String::from("You have already unpacked this fardel."));
+                        // 3. check it is not sealed
+                        } else if get_sealed_status(&deps.storage, global_id) {
+                            status = Failure;
+                            msg = Some(String::from("Fardel has been sealed."));
+                        // 4. check it has not expired
+                        } else if f.seal_time < env.block.time {
+                            seal_fardel(&mut deps.storage, global_id)?;
+                            status = Failure;
+                            msg = Some(String::from("Fardel has been sealed."));
+                        // 5. check that countable packages have not been all unpacked
+                        } else if f.countable && f.number_of_packages_left() == 0 {
+                            seal_fardel(&mut deps.storage, global_id)?;
+                            status = Failure;
+                            msg = Some(String::from("Fardel has been sealed."));
+                        } else {
+
+                            // TODO: unpack by countable vs non-countable
+
+                            store_unpack(&mut deps.storage, &message_sender, global_id)?;
+                            contents_text = Some(f.contents_text);
+                            ipfs_cid = Some(f.ipfs_cid);
+                            passphrase = Some(f.passphrase);
+                        }
+                    },
+                    None => {
+                        status = Failure;
+                        msg = Some(String::from("Fardel is not available to unpack."));
+                    }
+                }
+            }
+            Err(_) => {
+                status = Failure;
+                msg = Some(String::from("Fardel is not available to unpack."));
+            }
+        }
+    }
+    
+    let mut messages: Vec<CosmosMsg> = vec![];
+
+    if status == Success {
+        let fardel_owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
+        messages.push(CosmosMsg::Bank(BankMsg::Send {
+            from_address: env.contract.address.clone(),
+            to_address: fardel_owner,
+            amount: vec![Coin {
+                denom: DENOM.to_string(),
+                amount: Uint128(cost),
+            }],
+        }));
+    } else { // return coins to sender
+        messages.push(CosmosMsg::Bank(BankMsg::Send {
+            from_address: env.contract.address.clone(),
+            to_address: env.message.sender,
+            amount: env.message.sent_funds,
+        }));
+    }
 
     Ok(HandleResponse {
-        messages: vec![],
+        messages,
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::Follow { 
-            status: Success,
-        })?),
-    })
-}
-
-pub fn try_unfollow<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    handle: String,
-) -> StdResult<HandleResponse> {
-    let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    remove_following(&deps.api, &mut deps.storage, &message_sender, handle)?;
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::Follow { 
-            status: Success,
+        data: Some(to_binary(&HandleAnswer::UnpackFardel { 
+            status,
+            msg,
+            contents_data,
         })?),
     })
 }
@@ -775,83 +887,3 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    fardel_id: Uint128,
-) -> StdResult<HandleResponse> {
-    let mut status: ResponseStatus = Success;
-    let mut msg: Option<String> = None;
-    let mut contents_text: Option<String> = None;
-    let mut ipfs_cid: Option<String> = None;
-    let mut passphrase: Option<String> = None;
-    let mut cost: u128 = 0;
-    let fardel_id = fardel_id.u128();
-    let message_sender = deps.api.canonical_address(&env.message.sender)?;
-
-    let sent_coins = env.message.sent_funds;
-    if sent_coins[0].denom != DENOM {
-        status = Failure;
-        msg = Some(String::from("Wrong denomination."))
-    } else {
-        let fardel = get_fardel_by_id(&deps.storage, fardel_id);
-        match fardel {
-            Ok(fardel) => {
-                match fardel {
-                    Some(f) => {
-                        cost = f.cost.amount.u128();
-                        let sent_amount: u128 = sent_coins[0].amount.u128();
-                        if sent_amount != cost {
-                            status = Failure;
-                            msg = Some(String::from("Didn't send correct number of coins to unpack."))
-                        } else {
-                            if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
-                                status = Failure;
-                                msg = Some(String::from("You have already unpacked this fardel."));
-                            } else {
-                                store_unpack(&mut deps.storage, &message_sender, fardel_id)?;
-                                contents_text = Some(f.contents_text);
-                                ipfs_cid = Some(f.ipfs_cid);
-                                passphrase = Some(f.passphrase);
-                            }
-                        }
-                    },
-                    None => {
-                        status = Failure;
-                        msg = Some(String::from("Fardel is not available to unpack."));
-                    }
-                }
-            }
-            Err(_) => {
-                status = Failure;
-                msg = Some(String::from("Fardel is not available to unpack."));
-            }
-        }
-    }
-    
-    let mut messages: Vec<CosmosMsg> = vec![];
-
-    if status == Success {
-        let fardel_owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
-        messages.push(CosmosMsg::Bank(BankMsg::Send {
-            from_address: env.contract.address.clone(),
-            to_address: fardel_owner,
-            amount: vec![Coin {
-                denom: DENOM.to_string(),
-                amount: Uint128(cost),
-            }],
-        }));
-    }
-
-    Ok(HandleResponse {
-        messages,
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::UnpackFardel { 
-            status,
-            msg,
-            contents_text,
-            ipfs_cid,
-            passphrase,
-        })?),
-    })
-}
