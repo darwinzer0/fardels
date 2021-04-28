@@ -3,6 +3,7 @@ use cosmwasm_std::{
     CosmosMsg, BankMsg, HumanAddr,
     StdError, StdResult, Storage, Uint128
 };
+use twox_hash::xxh3::hash128_with_seed;
 use crate::msg::{
     HandleAnswer, ResponseStatus, 
     ResponseStatus::Success, ResponseStatus::Failure, Fee,
@@ -20,7 +21,7 @@ use crate::state::{Config, ReadonlyConfig,
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
     valid_max_handle_len, valid_max_tag_len, valid_max_number_of_tags,
-    valid_max_description_len, valid_max_query_page_size,
+    valid_max_description_len, valid_max_query_page_size, valid_seal_time,
 };
 use crate::viewing_key::{ViewingKey};
 use crate::contract::DENOM;
@@ -538,7 +539,8 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     let mut msg: Option<String> = None;
     let mut fardel_id: Option<Uint128> = None;
 
-    let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+    let config = ReadonlyConfig::from_storage(&deps.storage);
+    let constants = config.constants()?;
 
     let mut tag_size_ok = true;
     for tag in tags {
@@ -549,7 +551,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     }
 
     let mut img_size_ok = true;
-    // if fardel img sent check size
+    // if fardel img sent, check size
     if img.is_some() {
         let img: Vec<u8> = img.unwrap().0;
         if img.len() as u32 > constants.max_fardel_img_size {
@@ -568,27 +570,50 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
         status = Failure;
         msg = Some(String::from("Invalid fardel data"));
     } else {
+        let stored_seal_time = valid_seal_time(env.block.time, seal_time)?;
+
         let message_sender = deps.api.canonical_address(&env.message.sender)?;
+
+        // generate fardel hash id using xx3h
+        //let unique = false;
+        //let mut c = 1_u64;
+
+        let hash_data_len = 8 + 16 + 16 + env.message.sender.len() + public_message.as_bytes().len();
+        let mut hash_data = Vec::with_capacity(hash_data_len);
+        hash_data.extend_from_slice(&env.block.height.to_be_bytes());
+        hash_data.extend_from_slice(&cost.u128().to_be_bytes());
+        hash_data.extend_from_slice(&config.fardel_count().to_be_bytes());
+        hash_data.extend_from_slice(&env.message.sender.0.as_bytes());
+        hash_data.extend_from_slice(&public_message.as_bytes());
+        let hash_id = hash128_with_seed(&hash_data, env.block.time);
+
+        // make sure unique (probably overkill!)
+        // TODO? 50% of collision with 19 quintillion fardels :)
+        //unique = true
 
         let fardel = Fardel {
             // global_id will be overwritten in store_fardel, just a placeholder
             global_id: Uint128(0),
+            hash_id: Uint128(hash_id),
             public_message,
-            contents_text,
-            ipfs_cid,
-            passphrase,
+            tags,
+            contents_data,
             cost: Coin {
                 amount: cost,
                 denom: DENOM.to_string(),
             },
+            countable,
+            approval_req,
+            next_package: 0_u16,
+            seal_time: stored_seal_time,
             timestamp: env.block.time,
         }.into_stored()?;
     
         store_fardel(
-            &mut deps.storage, &message_sender, 
-            fardel.public_message, fardel.contents_text, 
-            fardel.ipfs_cid, fardel.passphrase, fardel.cost,
-            fardel.timestamp,
+            &mut deps.storage, fardel.hash_id, &message_sender, 
+            fardel.public_message, fardel.tags, fardel.contents_data, 
+            fardel.cost, fardel.countable, fardel.approval_req, 
+            fardel.next_package, fardel.seal_time, fardel.timestamp,
         )?;
         let config = ReadonlyConfig::from_storage(&deps.storage);
         fardel_id = Some(Uint128(config.fardel_count() - 1));

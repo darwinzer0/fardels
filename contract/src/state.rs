@@ -20,6 +20,7 @@ pub const KEY_COMMISSION_BALANCE: &[u8] = b"commission";
 pub const PREFIX_FARDELS: &[u8] = b"fardel";
 pub const PREFIX_FARDEL_THUMBNAIL_IMGS: &[u8] = b"fardel-img";
 pub const PREFIX_ID_FARDEL_MAPPINGS: &[u8] = b"id-to-fardel";
+pub const PREFIX_HASH_ID_MAPPINGS: &[u8] = b"hash-to-id";
 pub const PREFIX_SEALED: &[u8] = b"sealed";
 
 // Fardel unpacking
@@ -173,6 +174,7 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub struct Fardel {
     pub global_id: Uint128,
+    pub hash_id: Uint128,
     pub public_message: String,
     pub tags: Vec<String>,
     pub contents_data: Vec<String>,
@@ -194,6 +196,7 @@ impl Fardel {
         ).collect();
         let fardel = StoredFardel {
             global_id: self.global_id.u128(),
+            hash_id: self.hash_id.u128(),
             public_message: self.public_message.as_bytes().to_vec(),
             tags: stored_tags,
             contents_data: stored_contents_data,
@@ -220,6 +223,7 @@ impl Fardel {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StoredFardel {
     pub global_id: u128,
+    pub hash_id: u128,
     pub public_message: Vec<u8>,
     pub tags: Vec<Vec<u8>>,
     pub contents_data: Vec<Vec<u8>>,
@@ -241,6 +245,7 @@ impl StoredFardel {
         ).collect();
         let fardel = Fardel {
             global_id: Uint128(self.global_id),
+            hash_id: Uint128(self.hash_id),
             public_message: String::from_utf8(self.public_message).ok().unwrap_or_default(),
             tags: humanized_tags,
             contents_data: humanized_contents_data,
@@ -272,12 +277,16 @@ pub struct GlobalIdFardelMapping {
 
 pub fn store_fardel<S: Storage>(
     store: &mut S,
+    hash_id: u128,
     owner: &CanonicalAddr,
     public_message: Vec<u8>,
-    contents_text: Vec<u8>,
-    ipfs_cid: Vec<u8>,
-    passphrase: Vec<u8>,
+    tags: Vec<Vec<u8>>,
+    contents_data: Vec<Vec<u8>>,
     cost: u128,
+    countable: bool,
+    approval_req: bool,
+    next_package: u16,
+    seal_time: u64,
     timestamp: u64,
 ) -> StdResult<()> {
     let mut config = Config::from_storage(store);
@@ -286,11 +295,15 @@ pub fn store_fardel<S: Storage>(
 
     let fardel = StoredFardel {
         global_id,
+        hash_id,
         public_message: public_message.clone(),
-        contents_text: contents_text.clone(),
-        ipfs_cid: ipfs_cid.clone(),
-        passphrase: passphrase.clone(),
+        tags: tags.clone(),
+        contents_data: contents_data.clone(),
         cost,
+        countable,
+        approval_req,
+        next_package,
+        seal_time,
         timestamp,
     };
 
@@ -328,6 +341,18 @@ fn map_global_id_to_fardel<S: Storage>(
     set_bin_data(&mut store, &global_id.to_be_bytes(), &mapping)
 }
 
+// Stores a mapping from hash id to global_id in prefixed storage
+//   users see hash ids only. 
+//   Admin can access fardels directly by global (sequential) id for indexing.
+fn map_hash_id_to_global_id<S: Storage>(
+    storage: &mut S,
+    hash_id: u128,
+    global_id: u128,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, storage);
+    set_bin_data(&mut store, &hash_id.to_be_bytes(), &global_id)
+}
+
 pub fn get_fardel_owner<S: ReadonlyStorage>(
     storage: &S,
     fardel_id: u128,
@@ -356,6 +381,15 @@ pub fn get_fardel_by_id<S: ReadonlyStorage>(
     let stored_fardel: StoredFardel = store.get_at(mapping.index)?;
     let fardel: Fardel = stored_fardel.into_humanized()?;
     Ok(Some(fardel))
+}
+
+pub fn get_fardel_by_hash<S: ReadonlyStorage>(
+    storage: &S,
+    hash: u128,
+) -> StdResult<Option<Fardel>> {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, storage);
+    let global_id: u128 = get_bin_data(&storage, &hash.to_be_bytes())?;
+    get_fardel_by_id(&storage, global_id)
 }
 
 pub fn get_fardels<S: ReadonlyStorage>(
