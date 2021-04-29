@@ -11,7 +11,7 @@ use crate::exec::{
     try_set_viewing_key, try_store_deactivate, try_store_block,
     try_carry_fardel, try_seal_fardel,
     try_follow, try_unfollow, try_rate_fardel, try_comment_on_fardel,
-    try_unpack_fardel,
+    try_unpack_fardel, try_approve_pending_unpacks,
 };
 use crate::msg::{
     HandleMsg, InitMsg, QueryMsg, QueryAnswer, 

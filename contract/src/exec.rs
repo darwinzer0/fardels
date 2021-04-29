@@ -14,10 +14,12 @@ use crate::state::{Config, ReadonlyConfig,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img, store_account_ban, store_account_block,
     Fardel, get_fardel_by_hash, get_fardel_owner, seal_fardel, store_fardel, 
-    get_fardel_next_package, store_fardel_next_package,
+    get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
     store_following, remove_following,
     store_account_deactivated,
+    PendingUnpack,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
+    get_pending_unpacks_from_start,
     upvote_fardel, downvote_fardel, comment_on_fardel,
     write_viewing_key, get_commission_balance,
     is_blocked_by,
@@ -669,6 +671,94 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    number: i32,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+
+    let owner = deps.api.canonical_address(&env.message.sender)?;
+    let mut messages: Vec<CosmosMsg> = vec![];
+
+    if number < 1 {
+        status = Failure;
+        msg = Some(String::from("invalid number of unpacks to approve"));
+    } else {
+        let pending_unpacks = get_pending_unpacks_from_start(&deps.storage, &owner, number as u32)?;
+        let pending_unpacks: Vec<PendingUnpack> = pending_unpacks.into_iter().filter(|pu| !pu.canceled).collect();
+
+        let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+        let total_commission: u128 = 0;
+
+        for pending_unpack in pending_unpacks {
+            // complete the unpack
+            TOTOTOTOTODODODODODODO!:!:!
+
+            // handle the transaction
+
+            let cost = pending_unpack.coin.amount.u128();
+
+            // commission_amount = cost * commission_rate_nom / commission_rate_denom
+            let cost_u256 = Some(U256::from(cost));
+            let commission_rate_nom = Some(U256::from(constants.transaction_fee.commission_rate_nom));
+            let commission_rate_denom = Some(U256::from(constants.transaction_fee.commission_rate_denom));
+            let commission_amount = div(
+                mul(cost_u256, commission_rate_nom),
+                commission_rate_denom,
+            ).ok_or_else(|| {
+                StdError::generic_err(format!(
+                    "Cannot calculate cost {} * commission_rate_nom {} / commission_rate_denom {}",
+                    cost_u256.unwrap(),
+                    commission_rate_nom.unwrap(),
+                    commission_rate_denom.unwrap(),
+                ))
+            })?;
+    
+            let payment_amount = sub(cost_u256, Some(commission_amount)).ok_or_else(|| {
+                StdError::generic_err(format!(
+                    "Cannot calculate cost {} - commission_amount {}",
+                    cost_u256.unwrap(),
+                    commission_amount,
+                ))
+            })?;
+    
+            // push payment
+            messages.push(CosmosMsg::Bank(BankMsg::Send {
+                from_address: env.contract.address.clone(),
+                to_address: env.message.sender,
+                amount: vec![Coin {
+                    denom: DENOM.to_string(),
+                    amount: Uint128(payment_amount.low_u128()),
+                }],
+            }));
+    
+            // sum commission
+            total_commission += commission_amount.low_u128();
+        }
+        if total_commission > 0 {
+            messages.push(CosmosMsg::Bank(BankMsg::Send {
+                from_address: env.contract.address.clone(),
+                to_address: deps.api.human_address(&constants.admin)?,
+                amount: vec![Coin {
+                    denom: DENOM.to_string(),
+                    amount: Uint128(total_commission),
+                }],
+            }));
+        }
+    }
+
+    Ok(HandleResponse {
+        messages,
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::ApprovePendingUnpacks {
+            status,
+            msg,
+        })?),
+    })
+}
+
 pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -767,7 +857,15 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
 
                             if f.approval_req {
                                 // do a pending unpack
-                                store_pending_unpack(&mut deps.storage, &message_sender, global_id, next_package)?;
+                                store_pending_unpack(
+                                    &mut deps.storage, 
+                                    &owner, 
+                                    &message_sender, 
+                                    global_id, 
+                                    next_package,
+                                    sent_coins[0],
+                                    env.block.time,
+                                )?;
                                 msg = Some(String::from("Fardel unpack is pending approval by owner."));
                             } else {
                                 store_unpack(&mut deps.storage, &message_sender, global_id, next_package)?;
@@ -794,7 +892,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     let mut messages: Vec<CosmosMsg> = vec![];
 
     if pending {
-
+        // have contract hold on to the coin
     } else if status == Success {
         let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
 
@@ -822,6 +920,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
             ))
         })?;
 
+        // push payment
         let fardel_owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address.clone(),
@@ -831,7 +930,20 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                 amount: Uint128(payment_amount.low_u128()),
             }],
         }));
-    } else { // return coins to sender
+
+        // push commission
+        let commission_amount = commission_amount.low_u128();
+        if commission_amount > 0 {
+            messages.push(CosmosMsg::Bank(BankMsg::Send {
+                from_address: env.contract.address.clone(),
+                to_address: deps.api.human_address(&constants.admin)?,
+                amount: vec![Coin {
+                    denom: DENOM.to_string(),
+                    amount: Uint128(commission_amount),
+                }],
+            }));
+        }
+    } else { // return coins to sender if there was a Failure
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address.clone(),
             to_address: env.message.sender,
