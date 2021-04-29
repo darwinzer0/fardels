@@ -162,10 +162,8 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         ),
         HandleMsg::SealFardel { fardel_id, .. } =>
             try_seal_fardel(deps, env, fardel_id), 
-        HandleMsg::ApproveUnpack { fardel_id, unpacker, .. } =>
-            try_approve_unpack(deps, env, fardel_id, unpacker),
-        HandleMsg::ApproveAllUnpacks { .. } =>
-            try_approve_all_unpacks(deps, env),
+        HandleMsg::ApprovePendingUnpacks { number, .. } =>
+            try_approve_pending_unpacks(deps, env, number),
 
         // Other fardels
         HandleMsg::UnpackFardel { fardel_id, .. } => 

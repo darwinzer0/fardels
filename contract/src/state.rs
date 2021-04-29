@@ -22,10 +22,14 @@ pub const PREFIX_FARDEL_THUMBNAIL_IMGS: &[u8] = b"fardel-img";
 pub const PREFIX_ID_FARDEL_MAPPINGS: &[u8] = b"id-to-fardel";
 pub const PREFIX_HASH_ID_MAPPINGS: &[u8] = b"hash-to-id";
 pub const PREFIX_SEALED: &[u8] = b"sealed";
+pub const PREFIX_FARDEL_NEXT_PACKAGE: &[u8] = b"next";
 
 // Fardel unpacking
 pub const PREFIX_UNPACKED: &[u8] = b"unpacked";
 pub const PREFIX_ID_UNPACKED_MAPPINGS: &[u8] = b"id-to-unpacked";
+pub const PREFIX_PENDING_UNPACK: &[u8] = b"pending";
+pub const PREFIX_PENDING_START: &[u8] = b"pending-start";
+pub const PREFIX_ID_PENDING_UNPACKED_MAPPINGS: &[u8] = b"id-to-pending";
 
 // Fardel rating/comments
 pub const PREFIX_UPVOTES: &[u8] = b"upvotes";
@@ -64,7 +68,7 @@ pub const PREFIX_COMPLETED_TX: &[u8] = b"tx";
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct Constants {
     pub admin: CanonicalAddr,
-    pub transaction_fee: Fee,
+    pub transaction_fee: StoredFee,
     pub max_query_page_size: u16,
 
     // fardel settings
@@ -162,6 +166,22 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct StoredFee {
+    pub commission_rate_nom: u128,
+    pub commission_rate_denom: u128,
+}
+
+impl StoredFee {
+    pub fn into_stored(self) -> StdResult<Fee> {
+        let fee = Fee {
+            commission_rate_nom: Uint128(self.commission_rate_nom),
+            commission_rate_denom: Uint128(self.commission_rate_denom),
+        };
+        Ok(fee)
+    }
+}
+
 //
 // Fardels
 //
@@ -181,7 +201,6 @@ pub struct Fardel {
     pub cost: Coin,
     pub countable: bool,
     pub approval_req: bool,
-    pub next_package: u16,
     pub seal_time: u64,
     pub timestamp: u64,
 }
@@ -203,7 +222,6 @@ impl Fardel {
             cost: self.cost.amount.u128(),
             countable: self.countable,
             approval_req: self.approval_req,
-            next_package: self.next_package,
             seal_time: self.seal_time,
             timestamp: self.timestamp,
         };
@@ -214,9 +232,10 @@ impl Fardel {
         self.contents_data.len() as u16
     }
 
-    pub fn number_of_packages_left(self) -> u16 {
+    pub fn number_of_packages_left<S: ReadonlyStorage>(self, storage: &S) -> u16 {
+        let next_package = get_fardel_next_package(storage, self.global_id.u128()).unwrap_or_else(|_| 0_u16);
         let total = self.contents_data.len() as u16;
-        0_u16.min(total - self.next_package)
+        0_u16.min(total - next_package)
     }
 }
 
@@ -230,7 +249,6 @@ pub struct StoredFardel {
     pub cost: u128,
     pub countable: bool,
     pub approval_req: bool,
-    pub next_package: u16,
     pub seal_time: u64,
     pub timestamp: u64,
 }
@@ -252,7 +270,6 @@ impl StoredFardel {
             cost: Coin { amount: Uint128(self.cost), denom: DENOM.to_string() },
             countable: self.countable,
             approval_req: self.approval_req,
-            next_package: self.next_package,
             seal_time: self.seal_time,
             timestamp: self.timestamp,
         };
@@ -263,9 +280,10 @@ impl StoredFardel {
         self.contents_data.len() as u16
     }
 
-    pub fn number_of_packages_left(self) -> u16 {
+    pub fn number_of_packages_left<S: ReadonlyStorage>(self, storage: &S) -> u16 {
+        let next_package = get_fardel_next_package(storage, self.global_id).unwrap_or_else(|_| 0_u16);
         let total = self.contents_data.len() as u16;
-        0_u16.min(total - self.next_package)
+        0_u16.min(total - next_package)
     }
 }
 
@@ -285,7 +303,6 @@ pub fn store_fardel<S: Storage>(
     cost: u128,
     countable: bool,
     approval_req: bool,
-    next_package: u16,
     seal_time: u64,
     timestamp: u64,
 ) -> StdResult<()> {
@@ -302,7 +319,6 @@ pub fn store_fardel<S: Storage>(
         cost,
         countable,
         approval_req,
-        next_package,
         seal_time,
         timestamp,
     };
@@ -310,8 +326,12 @@ pub fn store_fardel<S: Storage>(
     let index = append_fardel(store, &owner, fardel.clone())?;
     map_global_id_to_fardel(store, global_id, &owner, index)?;
     map_hash_id_to_global_id(store, hash_id, global_id)?;
+    store_fardel_next_package(store, global_id, 0_16)?;
+
     // automatically unpack for the owner
-    store_unpack(store, &owner, global_id)?;
+    for (i, _) in contents_data.iter().enumerate() {
+        store_unpack(store, &owner, global_id, i as u16)?;
+    }
     Ok(())
 }
 
@@ -340,6 +360,28 @@ fn map_global_id_to_fardel<S: Storage>(
         index
     };
     set_bin_data(&mut store, &global_id.to_be_bytes(), &mapping)
+}
+
+//
+// Stores the current index of the next package in countable fardels,
+//   Or always 0 in uncountable fardels.
+//   b"next" | {fardel global_id} | {next package idx}
+//
+pub fn store_fardel_next_package<S: Storage>(
+    storage: &mut S,
+    fardel_id: u128,
+    next_package: u16,
+) -> StdResult<()> {
+    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NEXT_PACKAGE, storage);
+    set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &next_package)
+}
+
+pub fn get_fardel_next_package<S: ReadonlyStorage>(
+    storage: &S,
+    fardel_id: u128,
+) -> StdResult<u16> {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_FARDEL_NEXT_PACKAGE, storage);
+    get_bin_data(&storage, &fardel_id.to_be_bytes())
 }
 
 // Stores a mapping from hash id to global_id in prefixed storage
@@ -853,21 +895,33 @@ pub fn is_blocked_by<S: Storage>(
 // Unpacked fardels
 //
 // are stored using multilevel prefixed + appendstore keys: 
-//    b"unpacked" | {owner canonical addr} | {appendstore index} -> global fardel id
+//    b"unpacked" | {unpacker canonical addr} | {appendstore index} -> global fardel id
 //
 //  plus an additional mapping is stored to allow getting unpacked status by global_id:
 //    b"id-to-unpacked" | {unpacker canonical addr} | {global fardel id} -> true/false
 //       value == true means it is unpacked, value == false OR no record in storage means packed
 //
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UnpackedFardel {
+    pub fardel_id: u128,
+    pub package_idx: u16,
+}
+
 pub fn store_unpack<S: Storage>(
     storage: &mut S,
     unpacker: &CanonicalAddr,
     fardel_id: u128,
+    package_idx: u16,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
     let mut store = AppendStoreMut::attach_or_create(&mut store)?;
-    store.push(&fardel_id)?;
+    
+    let unpacked_fardel = UnpackedFardel {
+        fardel_id,
+        package_idx,
+    };
+    store.push(&unpacked_fardel)?;
     map_global_id_to_unpacked_by_unpacker(storage, fardel_id, unpacker, true)
 }
 
@@ -921,6 +975,167 @@ pub fn get_unpacked_by_unpacker<S: Storage>(
         .map(|fardel_id| fardel_id)
         .collect();
     unpacked
+}
+
+//
+// Pending unpacked fardels
+//
+// are stored in appendstore for each owner
+//   b"pending" | {owner canonical addr} | {appendstore idx}
+// with
+//   b"pending-start" | {owner canonical addr} | index
+//
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PendingUnpack {
+    pub fardel_id: u128,
+    pub package_idx: u16,
+    pub unpacker: CanonicalAddr,
+    pub coin: Coin,
+    pub timestamp: u64,
+    pub canceled: bool,
+}
+
+pub fn set_pending_start<S: Storage>(
+    storage: &mut S,
+    owner: &CanonicalAddr,
+    idx: u32,
+) -> StdResult<()> {
+    let storage = PrefixedStorage::new(PREFIX_PENDING_START, storage);
+    set_bin_data(&mut storage, owner.as_slice(), &idx)
+}
+
+pub fn get_pending_start<S: ReadonlyStorage>(
+    storage: &S,
+    owner: &CanonicalAddr,
+) -> u32 {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_PENDING_START, storage);
+    get_bin_data(&storage, owner.as_slice()).unwrap_or_else(|_| 0_u32)
+}
+
+pub fn store_pending_unpack<S: Storage>(
+    storage: &mut S,
+    owner: &CanonicalAddr,
+    unpacker: &CanonicalAddr,
+    fardel_id: u128,
+    package_idx: u16,
+    sent_funds: Coin,
+    timestamp: u64,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
+    let mut store = AppendStoreMut::attach_or_create(&mut store)?;
+    
+    let pending_unpack = PendingUnpack {
+        fardel_id,
+        package_idx,
+        unpacker: unpacker.clone(),
+        coin: sent_funds,
+        timestamp,
+        canceled: false,
+    };
+    store.push(&pending_unpack)?;
+    let pending_unpack_idx = store.len() - 1;
+    map_global_id_to_pending_unpacked_by_unpacker(storage, fardel_id, unpacker, pending_unpack_idx, true)
+}
+
+// gets an individual pending unpacked fardel for a given owner canonical address
+pub fn get_pending_unpack<S: ReadonlyStorage>(
+    storage: &S,
+    owner: &CanonicalAddr,
+    idx: u32,
+) -> StdResult<PendingUnpack> {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
+    // Try to access the storage of pending unpacks for the account.
+    // If it doesn't exist yet, return an empty list.
+    let store = if let Some(result) = AppendStore::<PendingUnpack, _>::attach(&store) {
+        result?
+    } else {
+        return Err(StdError::generic_err("no pending unpacks for this owner"));
+    };
+    store.get_at(idx)
+}
+
+// gets a list of pending unpacked fardels for a given owner canonical address
+pub fn get_pending_unpacks_from_start<S: Storage>(
+    storage: &S, 
+    owner: &CanonicalAddr,
+    number: u32,
+) -> StdResult<Vec<PendingUnpack>> {
+    let start = get_pending_start(storage, owner);
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
+
+    // Try to access the storage of unpacked for the account.
+    // If it doesn't exist yet, return an empty list.
+    let store = if let Some(result) = AppendStore::<PendingUnpack, _>::attach(&store) {
+        result?
+    } else {
+        return Ok(vec![]);
+    };
+
+    // Take `number` unpacked starting from the latest unpacked, potentially skipping `start`
+    // unpacked from the start.
+    let unpacked_iter = store
+        .iter()
+        .skip(start as _)
+        .take(number as _);
+    let unpacked: StdResult<Vec<PendingUnpack>> = unpacked_iter
+        .map(|pending_unpack| pending_unpack)
+        .collect();
+    unpacked
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MyPendingUnpack {
+    pub pending_unpack_idx: u32,
+    pub value: bool,
+}
+
+// stores a mapping from global fardel id to pending unpacked status in prefixed storage
+fn map_global_id_to_pending_unpacked_by_unpacker<S: Storage>(
+    store: &mut S,
+    global_id: u128,
+    unpacker: &CanonicalAddr,
+    pending_unpack_idx: u32,
+    value: bool,
+) -> StdResult<()> {
+    let mut store = PrefixedStorage::multilevel(&[PREFIX_ID_PENDING_UNPACKED_MAPPINGS, unpacker.as_slice()], store);
+    let my_pending_unpack = MyPendingUnpack {
+        pending_unpack_idx,
+        value,
+    };
+    set_bin_data(&mut store, &global_id.to_be_bytes(), &my_pending_unpack)
+}
+
+// get the pending unpacked status of a fardel for a given unpacker canonical address
+pub fn get_pending_unpacked_status_by_fardel_id<S: Storage>(
+    storage: &S, 
+    unpacker: &CanonicalAddr,
+    fardel_id: u128,
+) -> MyPendingUnpack {
+    let mapping_store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_ID_PENDING_UNPACKED_MAPPINGS, unpacker.as_slice()], storage);
+    get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| MyPendingUnpack {
+        pending_unpack_idx: 0,
+        value: false,
+    })
+}
+
+pub fn cancel_pending_unpack<S: Storage>(
+    storage: &mut S,
+    owner: &CanonicalAddr,
+    unpacker: &CanonicalAddr,
+    fardel_id: u128,
+) -> StdResult<()> {
+    let my_pending_unpack = get_pending_unpacked_status_by_fardel_id(storage, &unpacker, fardel_id);
+    if my_pending_unpack.value {
+        let mut pending_unpack = get_pending_unpack(storage, &owner, my_pending_unpack.pending_unpack_idx)?;
+        pending_unpack.canceled = true;
+        let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
+        let mut store = AppendStoreMut::attach_or_create(&mut store)?;
+        // update element to canceled
+        store.set_at(my_pending_unpack.pending_unpack_idx, &pending_unpack)?;
+        map_global_id_to_pending_unpacked_by_unpacker(storage, fardel_id, unpacker, my_pending_unpack.pending_unpack_idx, false)
+    } else {
+        return Err(StdError::generic_err("cannot cancel unpack that is not pending."));
+    }
 }
 
 //

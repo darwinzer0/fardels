@@ -4,6 +4,8 @@ use cosmwasm_std::{
     StdError, StdResult, Storage, Uint128
 };
 use twox_hash::xxh3::hash128_with_seed;
+use primitive_types::U256;
+use crate::u256_math::*;
 use crate::msg::{
     HandleAnswer, ResponseStatus, 
     ResponseStatus::Success, ResponseStatus::Failure, Fee,
@@ -11,7 +13,8 @@ use crate::msg::{
 use crate::state::{Config, ReadonlyConfig,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img, store_account_ban, store_account_block,
-    Fardel, get_fardel_by_id, get_fardel_by_hash, get_fardel_owner, seal_fardel, store_fardel, 
+    Fardel, get_fardel_by_hash, get_fardel_owner, seal_fardel, store_fardel, 
+    get_fardel_next_package, store_fardel_next_package,
     store_following, remove_following,
     store_account_deactivated,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
@@ -53,7 +56,7 @@ pub fn try_set_constants<S: Storage, A: Api, Q: Querier>(
     }
 
     if transaction_fee.is_some() {
-        constants.transaction_fee = transaction_fee.unwrap();
+        constants.transaction_fee = transaction_fee.unwrap().into_stored()?;
     }
     if max_query_page_size.is_some() {
         constants.max_query_page_size = valid_max_query_page_size(max_query_page_size)?;
@@ -626,7 +629,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
         let hash_id = hash128_with_seed(&hash_data, env.block.time);
 
         // make sure unique (probably overkill!)
-        // TODO? 50% of collision with 19 quintillion fardels :)
+        // TODO? 50% chance of collision with 19 quintillion fardels :)
 
         let fardel = Fardel {
             // global_id will be overwritten in store_fardel, just a placeholder
@@ -641,7 +644,6 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
             },
             countable,
             approval_req,
-            next_package: 0_u16,
             seal_time: stored_seal_time,
             timestamp: env.block.time,
         }.into_stored()?;
@@ -650,7 +652,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
             &mut deps.storage, fardel.hash_id, &message_sender, 
             fardel.public_message, fardel.tags, fardel.contents_data, 
             fardel.cost, fardel.countable, fardel.approval_req, 
-            fardel.next_package, fardel.seal_time, fardel.timestamp,
+            fardel.seal_time, fardel.timestamp,
         )?;
         let config = ReadonlyConfig::from_storage(&deps.storage);
         fardel_id = Some(Uint128(config.fardel_count() - 1));
@@ -708,6 +710,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     fardel_id: Uint128,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
+    let mut pending: bool = false;
     let mut msg: Option<String> = None;
     let mut contents_data: Option<String> = None;
     let mut cost: u128 = 0;
@@ -724,23 +727,22 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
             Ok(fardel) => {
                 match fardel {
                     Some(f) => {
-
-                        cost = f.cost.amount.u128();
-                        let sent_amount: u128 = sent_coins[0].amount.u128();
                         let global_id = f.global_id.u128();
 
-                        // Check if sender is blocked by fardel owner
+                        // 1. Check if sender is blocked by fardel owner
                         let owner = get_fardel_owner(&deps.storage, global_id)?;
                         if is_blocked_by(&deps.storage, &owner, &message_sender) {
                             return Err(StdError::unauthorized());
                         }
 
-                        // 1. check cost is correct
-                        if sent_amount != cost {
-                            status = Failure;
-                            msg = Some(String::from("Didn't send correct amount of coins to unpack."));
+                        cost = f.cost.amount.u128();
+                        let sent_amount: u128 = sent_coins[0].amount.u128();
+                        let next_package = get_fardel_next_package(&deps.storage, global_id).unwrap_or_else(|_| 0_u16);
+                        let total = f.contents_data.len() as u16;
+                        let num_packages_left = 0_u16.min(total - next_package);
+
                         // 2. check it has not already been unpacked by the user
-                        } else if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id) {
+                        if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id) {
                             status = Failure;
                             msg = Some(String::from("You have already unpacked this fardel."));
                         // 3. check it is not sealed
@@ -753,18 +755,27 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
                         // 5. check that countable packages have not been all unpacked
-                        } else if f.countable && f.number_of_packages_left() == 0 {
+                        } else if f.countable && num_packages_left == 0 {
                             seal_fardel(&mut deps.storage, global_id)?;
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
+                        // 6. check cost is correct
+                        } else if sent_amount != cost {
+                            status = Failure;
+                            msg = Some(String::from("Didn't send correct amount of coins to unpack."));
                         } else {
 
-                            // TODO: unpack by countable vs non-countable
-
-                            store_unpack(&mut deps.storage, &message_sender, global_id)?;
-                            contents_text = Some(f.contents_text);
-                            ipfs_cid = Some(f.ipfs_cid);
-                            passphrase = Some(f.passphrase);
+                            if f.approval_req {
+                                // do a pending unpack
+                                store_pending_unpack(&mut deps.storage, &message_sender, global_id, next_package)?;
+                                msg = Some(String::from("Fardel unpack is pending approval by owner."));
+                            } else {
+                                store_unpack(&mut deps.storage, &message_sender, global_id, next_package)?;
+                                if f.countable {
+                                    store_fardel_next_package(&mut deps.storage, global_id, next_package + 1)?;
+                                }
+                                contents_data = Some(f.contents_data[next_package as usize]);
+                            }
                         }
                     },
                     None => {
@@ -782,14 +793,42 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     
     let mut messages: Vec<CosmosMsg> = vec![];
 
-    if status == Success {
+    if pending {
+
+    } else if status == Success {
+        let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+
+        // commission_amount = cost * commission_rate_nom / commission_rate_denom
+        let cost_u256 = Some(U256::from(cost));
+        let commission_rate_nom = Some(U256::from(constants.transaction_fee.commission_rate_nom));
+        let commission_rate_denom = Some(U256::from(constants.transaction_fee.commission_rate_denom));
+        let commission_amount = div(
+            mul(cost_u256, commission_rate_nom),
+            commission_rate_denom,
+        ).ok_or_else(|| {
+            StdError::generic_err(format!(
+                "Cannot calculate cost {} * commission_rate_nom {} / commission_rate_denom {}",
+                cost_u256.unwrap(),
+                commission_rate_nom.unwrap(),
+                commission_rate_denom.unwrap(),
+            ))
+        })?;
+
+        let payment_amount = sub(cost_u256, Some(commission_amount)).ok_or_else(|| {
+            StdError::generic_err(format!(
+                "Cannot calculate cost {} - commission_amount {}",
+                cost_u256.unwrap(),
+                commission_amount,
+            ))
+        })?;
+
         let fardel_owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address.clone(),
             to_address: fardel_owner,
             amount: vec![Coin {
                 denom: DENOM.to_string(),
-                amount: Uint128(cost),
+                amount: Uint128(payment_amount.low_u128()),
             }],
         }));
     } else { // return coins to sender

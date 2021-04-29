@@ -1,7 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use cosmwasm_std::{Binary, HumanAddr, Uint128};
+use cosmwasm_std::{Binary, HumanAddr, Uint128, StdResult};
 use crate::viewing_key::ViewingKey;
+use crate::state::StoredFee;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
@@ -544,4 +545,14 @@ pub enum ResponseStatus {
 pub struct Fee {
     pub commission_rate_nom: Uint128,
     pub commission_rate_denom: Uint128,
+}
+
+impl Fee {
+    pub fn into_stored(self) -> StdResult<StoredFee> {
+        let fee = StoredFee {
+            commission_rate_nom: self.commission_rate_nom.u128(),
+            commission_rate_denom: self.commission_rate_denom.u128(),
+        };
+        Ok(fee)
+    }
 }
