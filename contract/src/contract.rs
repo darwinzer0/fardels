@@ -10,8 +10,9 @@ use crate::exec::{
     try_set_profile_img, try_generate_viewing_key,
     try_set_viewing_key, try_store_deactivate, try_store_block,
     try_carry_fardel, try_seal_fardel,
-    try_follow, try_unfollow, try_rate_fardel, try_comment_on_fardel,
-    try_unpack_fardel, try_approve_pending_unpacks,
+    try_follow, try_unfollow, try_rate_fardel, try_unrate_fardel,
+    try_comment_on_fardel, try_delete_comment,
+    try_unpack_fardel, try_approve_pending_unpacks, try_cancel_pending,
 };
 use crate::msg::{
     HandleMsg, InitMsg, QueryMsg, QueryAnswer, 
@@ -176,8 +177,8 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             try_unrate_fardel(deps, env, fardel_id),
         HandleMsg::CommentOnFardel { fardel_id, comment, rating, .. } => 
             try_comment_on_fardel(deps, env, fardel_id, comment, rating),
-        HandleMsg::DeleteComment { comment_id, .. } =>
-            try_delete_comment(deps, env, comment_id),
+        HandleMsg::DeleteComment { fardel_id, comment_id, .. } =>
+            try_delete_comment(deps, env, fardel_id, comment_id),
     }
 }
 

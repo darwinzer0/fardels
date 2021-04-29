@@ -15,12 +15,15 @@ use crate::state::{Config, ReadonlyConfig,
     store_account, store_account_img, store_account_ban, store_account_block,
     Fardel, get_fardel_by_hash, get_fardel_owner, seal_fardel, store_fardel, 
     get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
+    get_global_id_by_hash,
     store_following, remove_following,
     store_account_deactivated,
     PendingUnpack, cancel_pending_unpack,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
     get_pending_unpacks_from_start,
-    upvote_fardel, downvote_fardel, comment_on_fardel,
+    has_rated, set_rated, get_rating, remove_rated, 
+    subtract_upvote_fardel, subtract_downvote_fardel,
+    add_upvote_fardel, add_downvote_fardel, comment_on_fardel, delete_comment,
     write_viewing_key, get_commission_balance,
     is_blocked_by,
 };
@@ -657,7 +660,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
             fardel.seal_time, fardel.timestamp,
         )?;
         let config = ReadonlyConfig::from_storage(&deps.storage);
-        fardel_id = Some(Uint128(config.fardel_count() - 1));
+        fardel_id = Some(Uint128(fardel.hash_id));
     }
     
     Ok(HandleResponse {
@@ -809,6 +812,8 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     let mut msg: Option<String> = None;
     let mut contents_data: Option<String> = None;
     let mut cost: u128 = 0;
+
+    // fardel id from hash
     let fardel_id = fardel_id.u128();
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
@@ -977,7 +982,7 @@ pub fn try_cancel_pending<S: Storage, A: Api, Q: Querier>(
     let status = Success;
     let msg: Option<String> = None;
 
-    let fardel_id = fardel_id.u128();
+    let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
     let owner = get_fardel_owner(&deps.storage, fardel_id)?;
     let unpacker = deps.api.canonical_address(&env.message.sender)?;
     cancel_pending_unpack(&mut deps.storage, &owner, &unpacker, fardel_id)?;
@@ -1001,14 +1006,20 @@ pub fn try_rate_fardel<S: Storage, A: Api, Q: Querier>(
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    let fardel_id = fardel_id.u128();
+    let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
+    // check that fardel has been unpacked by the user
     if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
-        // fardel has been unpacked by the user
-        if rating {
-            upvote_fardel(&mut deps.storage, fardel_id)?;
+        // check if user has already rated it
+        if has_rated(&deps.storage, &message_sender, fardel_id) {
+            status = Failure;
+            msg = Some(String::from("Cannot rate a fardel more than once."));
+        } else if rating {
+            set_rated(&mut deps.storage, &message_sender, fardel_id, true)?;
+            add_upvote_fardel(&mut deps.storage, fardel_id)?;
         } else {
-            downvote_fardel(&mut deps.storage, fardel_id)?;
+            set_rated(&mut deps.storage, &message_sender, fardel_id, false)?;
+            add_downvote_fardel(&mut deps.storage, fardel_id)?;
         }
     } else {
         // fardel has not been unpacked by the user
@@ -1025,6 +1036,40 @@ pub fn try_rate_fardel<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+pub fn try_unrate_fardel<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    fardel_id: Uint128,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+    let message_sender = deps.api.canonical_address(&env.message.sender)?;
+    let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
+
+    match get_rating(&deps.storage, &message_sender, fardel_id) {
+        Ok(rating) => {
+            remove_rated(&mut deps.storage, &message_sender, fardel_id);
+            if rating {
+                subtract_upvote_fardel(&mut deps.storage, fardel_id)?;
+            } else {
+                subtract_downvote_fardel(&mut deps.storage, fardel_id)?;
+            }
+        },
+        _ => {
+            status = Failure;
+            msg = Some(String::from("Cannot unrate a fardel that you have not rated."));    
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::UnrateFardel { 
+            status, msg
+        })?),
+    })
+}
+
 pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -1035,7 +1080,7 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    let fardel_id = fardel_id.u128();
+    let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
     if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
         // fardel has been unpacked by the user
@@ -1045,10 +1090,15 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
         // handle rating if it is here
         match rating {
             Some(r) => {
-                if r {
-                    upvote_fardel(&mut deps.storage, fardel_id)?;
+                if has_rated(&deps.storage, &message_sender, fardel_id) {
+                    status = Failure;
+                    msg = Some(String::from("Comment left but cannot rate a fardel more than once."));
+                } else if r {
+                    set_rated(&mut deps.storage, &message_sender, fardel_id, true)?;
+                    add_upvote_fardel(&mut deps.storage, fardel_id)?;
                 } else {
-                    downvote_fardel(&mut deps.storage, fardel_id)?;
+                    set_rated(&mut deps.storage, &message_sender, fardel_id, false)?;
+                    add_downvote_fardel(&mut deps.storage, fardel_id)?;
                 }
             },
             _ => {}
@@ -1068,3 +1118,29 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+pub fn try_delete_comment<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    fardel_id: Uint128,
+    comment_id: i32,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+    let message_sender = deps.api.canonical_address(&env.message.sender)?;
+    let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
+
+    if comment_id < 0 {
+        status = Failure;
+        msg = Some(String::from("invalid comment_id"));
+    } else {
+        delete_comment(&mut deps.storage, fardel_id, comment_id as u32)?;
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::DeleteComment { 
+            status, msg
+        })?),
+    })
+}

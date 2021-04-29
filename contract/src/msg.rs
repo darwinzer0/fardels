@@ -158,15 +158,10 @@ pub enum HandleMsg {
         fardel_id: Uint128,
         padding: Option<String>,
     },
-    /// approves the unpacking of a fardel for a given unpacker, 
-    ///   and processes transaction if pending.
-    ApproveUnpack {
-        fardel_id: Uint128,
-        unpacker: HumanAddr,
-        padding: Option<String>,
-    },
-    // approves all pending unpacked fardels, and processes transactions
-    ApproveAllUnpacks { 
+    /// approves the unpacking of a set number of pending fardels, 
+    ///   and processes transactions.
+    ApprovePendingUnpacks {
+        number: Option<i32>,
         padding: Option<String>,
     },
 
@@ -207,7 +202,8 @@ pub enum HandleMsg {
     },
     // deletes a comment
     DeleteComment {
-        comment_id: Uint128,
+        fardel_id: Uint128,
+        comment_id: i32,
         padding: Option<String>,
     }
 }
@@ -296,11 +292,7 @@ pub enum HandleAnswer {
         status: ResponseStatus,
         msg: Option<String>,
     },
-    ApproveUnpack {
-        status: ResponseStatus,
-        msg: Option<String>,
-    },
-    ApproveAllUnpacks {
+    ApprovePendingUnpacks {
         status: ResponseStatus,
         msg: Option<String>,
     },

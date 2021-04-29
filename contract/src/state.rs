@@ -32,9 +32,11 @@ pub const PREFIX_PENDING_START: &[u8] = b"pending-start";
 pub const PREFIX_ID_PENDING_UNPACKED_MAPPINGS: &[u8] = b"id-to-pending";
 
 // Fardel rating/comments
+pub const PREFIX_RATED: &[u8] = b"rated";
 pub const PREFIX_UPVOTES: &[u8] = b"upvotes";
 pub const PREFIX_DOWNVOTES: &[u8] = b"downvotes";
 pub const PREFIX_COMMENTS: &[u8] = b"comments";
+pub const PREFIX_DELETED_COMMENTS: &[u8] = b"del-comment";
 
 // Following
 pub const PREFIX_FOLLOWING: &[u8] = b"following";
@@ -54,9 +56,6 @@ pub const PREFIX_DEACTIVATED: &[u8] = b"deactived";
 
 // Banned accounts
 pub const PREFIX_BANNED: &[u8] = b"banned";
-
-// Pending transactions
-pub const PREFIX_PENDING_TX: &[u8] = b"pending-tx";
 
 // Completed transactions
 pub const PREFIX_COMPLETED_TX: &[u8] = b"tx";
@@ -424,6 +423,14 @@ pub fn get_fardel_by_id<S: ReadonlyStorage>(
     let stored_fardel: StoredFardel = store.get_at(mapping.index)?;
     let fardel: Fardel = stored_fardel.into_humanized()?;
     Ok(Some(fardel))
+}
+
+pub fn get_global_id_by_hash<S: ReadonlyStorage>(
+    storage: &S,
+    hash: u128,
+) -> StdResult<u128> {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, storage);
+    get_bin_data(&storage, &hash.to_be_bytes())
 }
 
 pub fn get_fardel_by_hash<S: ReadonlyStorage>(
@@ -1142,6 +1149,9 @@ pub fn cancel_pending_unpack<S: Storage>(
 // Fardel rating and comments
 //   there are no limits on number of downvotes/upvotes/comments made but each costs gas
 //
+// Record of whether an address has rated a fardel with upvote or downvote
+//    b"rated" | {rater canonical addr} | {fardel_id} -> bool
+//
 // Upvotes are stored using prefixed storage:
 //    b"upvotes" | {fardel_id} -> upvote count
 //
@@ -1151,13 +1161,63 @@ pub fn cancel_pending_unpack<S: Storage>(
 // Comments are stored using multilevel prefixed + appendstore keys: 
 //    b"comments" | {fardel id} | {appendstore index} -> Comment
 //
-pub fn upvote_fardel<S: Storage>(
+pub fn set_rated<S: Storage>(
+    storage: &mut S,
+    rater: &CanonicalAddr,
+    fardel_id: u128,
+    rating: bool,
+) -> StdResult<()> {
+    let mut storage = PrefixedStorage::multilevel(&[PREFIX_RATED, rater.as_slice()], storage);
+    set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &rating)
+}
+
+pub fn has_rated<S: ReadonlyStorage>(
+    storage: &S,
+    rater: &CanonicalAddr,
+    fardel_id: u128,
+) -> bool {
+    let storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_RATED, rater.as_slice()], storage);
+    let result: StdResult<bool> = get_bin_data(&storage, &fardel_id.to_be_bytes());
+    match result {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
+pub fn remove_rated<S: Storage>(
+    storage: &mut S,
+    rater: &CanonicalAddr,
+    fardel_id: u128,
+) {
+    let storage = PrefixedStorage::multilevel(&[PREFIX_RATED, rater.as_slice()], storage);
+    storage.remove(&fardel_id.to_be_bytes())
+}
+
+pub fn get_rating<S: ReadonlyStorage>(
+    storage: &S,
+    rater: &CanonicalAddr,
+    fardel_id: u128,
+) -> StdResult<bool> {
+    let storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_RATED, rater.as_slice()], storage);
+    get_bin_data(&storage, &fardel_id.to_be_bytes())
+}
+
+pub fn add_upvote_fardel<S: Storage>(
     store: &mut S,
     fardel_id: u128,
 ) -> StdResult <()> {
     let mut store = PrefixedStorage::new(PREFIX_UPVOTES, store);
     let upvotes: u32 = get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &(upvotes + 1))
+}
+
+pub fn subtract_upvote_fardel<S: Storage>(
+    store: &mut S,
+    fardel_id: u128,
+) -> StdResult <()> {
+    let mut store = PrefixedStorage::new(PREFIX_UPVOTES, store);
+    let upvotes: u32 = get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32);
+    set_bin_data(&mut store, &fardel_id.to_be_bytes(), &(upvotes - 1))
 }
 
 pub fn get_upvotes<S: Storage>(
@@ -1168,13 +1228,22 @@ pub fn get_upvotes<S: Storage>(
     get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32)
 }
 
-pub fn downvote_fardel<S: Storage>(
+pub fn add_downvote_fardel<S: Storage>(
     store: &mut S,
     fardel_id: u128,
 ) -> StdResult <()> {
     let mut store = PrefixedStorage::new(PREFIX_DOWNVOTES, store);
     let downvotes: u32 = get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &(downvotes + 1))
+}
+
+pub fn subtract_downvote_fardel<S: Storage>(
+    store: &mut S,
+    fardel_id: u128,
+) -> StdResult <()> {
+    let mut store = PrefixedStorage::new(PREFIX_DOWNVOTES, store);
+    let downvotes: u32 = get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32);
+    set_bin_data(&mut store, &fardel_id.to_be_bytes(), &(downvotes - 1))
 }
 
 pub fn get_downvotes<S: Storage>(
@@ -1189,6 +1258,13 @@ pub fn get_downvotes<S: Storage>(
 pub struct Comment {
     pub commenter: CanonicalAddr,
     pub text: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct IndexedComment {
+    pub commenter: CanonicalAddr,
+    pub text: Vec<u8>,
+    pub idx: u32,
 }
 
 pub fn comment_on_fardel<S: Storage>(
@@ -1207,12 +1283,12 @@ pub fn comment_on_fardel<S: Storage>(
 }
 
 pub fn get_comments<S: Storage>(
-    store: &S,
+    storage: &S,
     fardel_id: u128,
     page: u32,
     page_size: u32,
-) -> StdResult<Vec<Comment>> {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], store);
+) -> StdResult<Vec<IndexedComment>> {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
 
     // Try to access the storage of comments for the fardel.
     // If it doesn't exist yet, return an empty list.
@@ -1223,16 +1299,46 @@ pub fn get_comments<S: Storage>(
     };
 
     // Take `page_size` comments starting from the latest comment, potentially skipping `page * page_size`
-    // comments from the start.
+    // comments from the start. Add in the index of the comment for the fardel.
     let comments_iter = store
         .iter()
+        .enumerate()
         .rev()
         .skip((page * page_size) as _)
         .take(page_size as _);
-    let comments: StdResult<Vec<Comment>> = comments_iter
-        .map(|comment| comment)
+    let comments: StdResult<Vec<IndexedComment>> = comments_iter
+        .map(|(idx, comment)| {
+            Ok(
+                IndexedComment {
+                    commenter: comment.unwrap().commenter,
+                    text: comment.unwrap().text,
+                    idx: idx as u32,
+                }
+            )
+        })
+        .filter(|comment| 
+            !comment_is_deleted(storage, fardel_id, comment.unwrap().idx)
+        )
         .collect();
     comments
+}
+
+pub fn delete_comment<S: Storage>(
+    storage: &mut S,
+    fardel_id: u128,
+    comment_id: u32,
+) -> StdResult<()> {
+    let mut storage = PrefixedStorage::multilevel(&[PREFIX_DELETED_COMMENTS, &fardel_id.to_be_bytes()], storage);
+    set_bin_data(&mut storage, &comment_id.to_be_bytes(), &true)    
+}
+
+fn comment_is_deleted<S: ReadonlyStorage>(
+    storage: &S,
+    fardel_id: u128,
+    comment_id: u32,
+) -> bool {
+    let storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_DELETED_COMMENTS, &fardel_id.to_be_bytes()], storage);
+    get_bin_data(&storage, &comment_id.to_be_bytes()).unwrap_or_else(|_| true)
 }
 
 //
