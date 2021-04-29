@@ -341,7 +341,7 @@ pub enum QueryMsg {
     IsHandleAvailable {
         handle: String,
     },
-    // Get a fardel by global id, not logged in
+    // Get a fardel by hash id, not logged in
     GetFardelById {
         fardel_id: Uint128,
     },
@@ -388,7 +388,7 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
-    // Get a fardel by global id, as a logged in user (with unpacked private data)
+    // Get a fardel by hash id, as a logged in user (with unpacked private data)
     GetFardelByIdAuth {
         address: HumanAddr,
         key: String,
@@ -429,7 +429,7 @@ pub enum QueryMsg {
     // Queries requiring authentication, admin user only
     //
 
-    // Admin-only batch get fardels by id
+    // Admin-only batch get fardels by global id
     GetFardelsBatch {
         // must match admin
         address: HumanAddr,

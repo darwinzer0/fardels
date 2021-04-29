@@ -9,7 +9,8 @@ use crate::msg::{
 };
 use crate::state::{get_account, get_account_for_handle,
     get_account_img,
-    Fardel, get_fardel_by_id, get_fardels,
+    Fardel, get_fardel_by_id, get_fardel_by_hash,
+    get_fardels,
     get_following, get_followers,
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
@@ -51,7 +52,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     fardel_id: Uint128,
 ) -> QueryResult {
     let fardel_id = fardel_id.u128();
-    let fardel = get_fardel_by_id(&deps.storage, fardel_id)?;
+    let fardel = get_fardel_by_hash(&deps.storage, fardel_id)?;
     let fardel = match fardel {
         Some(fardel) => { fardel },
         None => { 
@@ -99,7 +100,7 @@ pub fn query_get_fardel_by_id_auth<S: Storage, A: Api, Q: Querier>(
     fardel_id: Uint128,
 ) -> QueryResult {
     let fardel_id = fardel_id.u128();
-    let fardel = get_fardel_by_id(&deps.storage, fardel_id)?;
+    let fardel = get_fardel_by_hash(&deps.storage, fardel_id)?;
     let fardel = match fardel {
         Some(fardel) => { fardel },
         None => { 
