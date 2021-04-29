@@ -694,10 +694,14 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
 
         for pending_unpack in pending_unpacks {
             // complete the unpack
-            TOTOTOTOTODODODODODODO!:!:!
+            store_unpack(
+                &mut deps.storage, 
+                &pending_unpack.unpacker, 
+                pending_unpack.fardel_id, 
+                pending_unpack.package_idx
+            )?;
 
             // handle the transaction
-
             let cost = pending_unpack.coin.amount.u128();
 
             // commission_amount = cost * commission_rate_nom / commission_rate_denom
@@ -869,10 +873,12 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                                 msg = Some(String::from("Fardel unpack is pending approval by owner."));
                             } else {
                                 store_unpack(&mut deps.storage, &message_sender, global_id, next_package)?;
-                                if f.countable {
-                                    store_fardel_next_package(&mut deps.storage, global_id, next_package + 1)?;
-                                }
                                 contents_data = Some(f.contents_data[next_package as usize]);
+                            }
+
+                            // both pending and completed unpacks use up a countable package
+                            if f.countable {
+                                store_fardel_next_package(&mut deps.storage, global_id, next_package + 1)?;
                             }
                         }
                     },
