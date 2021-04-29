@@ -17,7 +17,7 @@ use crate::state::{Config, ReadonlyConfig,
     get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
     store_following, remove_following,
     store_account_deactivated,
-    PendingUnpack,
+    PendingUnpack, cancel_pending_unpack,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
     get_pending_unpacks_from_start,
     upvote_fardel, downvote_fardel, comment_on_fardel,
@@ -671,13 +671,49 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
+pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    number: i32,
+    fardel_id: Uint128,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
+    let fardel_id = fardel_id.u128();
+
+    match get_fardel_by_hash(&deps.storage, fardel_id) {
+        Ok(_) => {
+            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
+            if owner.eq(&env.message.sender) {
+                seal_fardel(&mut deps.storage, fardel_id)?;
+            } else {
+                status = Failure;
+                msg = Some(String::from("You are not the owner of that fardel."))
+            }
+        },
+        _ => {
+            status = Failure;
+            msg = Some(String::from("No Fardel with given id."));
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::SealFardel {
+            status,
+            msg,
+        })?),
+    })
+}
+
+pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    number: Option<i32>,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+    let number = number.unwrap_or_else(|| 10_i32);
 
     let owner = deps.api.canonical_address(&env.message.sender)?;
     let mut messages: Vec<CosmosMsg> = vec![];
@@ -698,7 +734,7 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
                 &mut deps.storage, 
                 &pending_unpack.unpacker, 
                 pending_unpack.fardel_id, 
-                pending_unpack.package_idx
+                pending_unpack.package_idx,
             )?;
 
             // handle the transaction
@@ -757,41 +793,6 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
         messages,
         log: vec![],
         data: Some(to_binary(&HandleAnswer::ApprovePendingUnpacks {
-            status,
-            msg,
-        })?),
-    })
-}
-
-pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    fardel_id: Uint128,
-) -> StdResult<HandleResponse> {
-    let mut status: ResponseStatus = Success;
-    let mut msg: Option<String> = None;
-    let fardel_id = fardel_id.u128();
-
-    match get_fardel_by_hash(&deps.storage, fardel_id) {
-        Ok(_) => {
-            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
-            if owner.eq(&env.message.sender) {
-                seal_fardel(&mut deps.storage, fardel_id)?;
-            } else {
-                status = Failure;
-                msg = Some(String::from("You are not the owner of that fardel."))
-            }
-        },
-        _ => {
-            status = Failure;
-            msg = Some(String::from("No Fardel with given id."));
-        }
-    }
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::SealFardel {
             status,
             msg,
         })?),
@@ -964,6 +965,29 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
             status,
             msg,
             contents_data,
+        })?),
+    })
+}
+
+pub fn try_cancel_pending<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    fardel_id: Uint128,
+) -> StdResult<HandleResponse> {
+    let status = Success;
+    let msg: Option<String> = None;
+
+    let fardel_id = fardel_id.u128();
+    let owner = get_fardel_owner(&deps.storage, fardel_id)?;
+    let unpacker = deps.api.canonical_address(&env.message.sender)?;
+    cancel_pending_unpack(&mut deps.storage, &owner, &unpacker, fardel_id)?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::CancelPending { 
+            status,
+            msg,
         })?),
     })
 }

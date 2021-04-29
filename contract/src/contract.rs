@@ -54,7 +54,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     };
 
     // admin settings
-    let transaction_fee = valid_transaction_fee(msg.transaction_fee)?;
+    let transaction_fee = valid_transaction_fee(msg.transaction_fee)?.into_stored()?;
     let max_query_page_size = valid_max_query_page_size(msg.max_query_page_size)?;
 
     // fardel settings
