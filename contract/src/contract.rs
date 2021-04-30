@@ -18,9 +18,10 @@ use crate::msg::{
     HandleMsg, InitMsg, QueryMsg, QueryAnswer, 
 };
 use crate::query::{
-    query_get_fardel_by_id, query_get_fardel_by_id_auth, query_get_fardels,
-    query_get_fardels_auth, query_get_following, query_get_followers, query_get_handle,
-    query_get_profile, query_is_handle_available,
+    query_get_fardel_by_id, query_get_fardels,
+    query_get_following, query_get_followers, query_get_handle,
+    query_get_profile, query_is_handle_available, query_get_comments,
+    query_get_transactions,
 };
 use crate::state::{
     Config, Constants, read_viewing_key, is_banned,
@@ -192,11 +193,11 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::IsHandleAvailable { handle } => 
             query_is_handle_available(deps, handle),
         QueryMsg::GetFardelById { fardel_id } =>
-            query_get_fardel_by_id(deps, fardel_id),
+            query_get_fardel_by_id(deps, &None, fardel_id),
         QueryMsg::GetFardels { handle, page, page_size } =>
-            query_get_fardels(deps, handle, page, page_size),
+            query_get_fardels(deps, &None, handle, page, page_size),
         QueryMsg::GetComments { fardel_id, page, page_size } =>
-            query_get_comments(deps, fardel_id, page, page_size),
+            query_get_comments(deps, &None, fardel_id, page, page_size),
         _ => authenticated_queries(deps, msg),
     }
 }
@@ -235,15 +236,15 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
                 QueryMsg::GetFollowers { address, page, page_size, .. } => 
                     query_get_followers(&deps, &address, page, page_size),
                 QueryMsg::GetFardelByIdAuth { address, fardel_id, .. } => 
-                    query_get_fardel_by_id_auth(&deps, &address, fardel_id),
+                    query_get_fardel_by_id(&deps, &Some(address), fardel_id),
                 QueryMsg::GetFardelsAuth { address, handle, page, page_size, .. } =>
-                    query_get_fardels_auth(&deps, &address, handle, page, page_size),
+                    query_get_fardels(&deps, &Some(address), handle, page, page_size),
                 QueryMsg::GetUnpacked { address, page, page_size, .. } =>
                     query_get_unpacked(&deps, &address, page, page_size),
                 QueryMsg::GetPendingUnpacks { address, page, page_size, .. } =>
                     query_get_pending_unpacks(&deps, &address, page, page_size),
                 QueryMsg::GetCommentsAuth { address, fardel_id, page, page_size, .. } =>
-                    query_get_comments_auth(&deps, &address, fardel_id, page, page_size),
+                    query_get_comments(&deps, &Some(address), fardel_id, page, page_size),
                 QueryMsg::GetFardelsBatch { address, page, page_size, .. } =>
                     query_get_fardels_batch(&deps, &address, page, page_size),
                 _ => panic!("This query type does not require authentication"),

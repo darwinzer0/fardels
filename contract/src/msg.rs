@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Binary, HumanAddr, Uint128, StdResult};
 use crate::viewing_key::ViewingKey;
-use crate::state::StoredFee;
+use crate::state::{StoredFee, Tx};
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
@@ -458,14 +458,13 @@ impl QueryMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Comment {
+pub struct CommentResponse {
     pub text: String,
-    // if the commenter has been banned or has deleted the comment, 
-    //   then text will be "" and available will be false.
-    pub available: bool,
-    // comment id is only set if the authenticated user is the commenter
-    //   (enables deletion)
-    pub comment_id: Option<Uint128>,
+    pub handle: String,
+    // comment id and fardel id is only set if the authenticated user 
+    //   is the commenter (enables deletion)
+    pub fardel_id: Option<Uint128>,
+    pub comment_id: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -477,7 +476,7 @@ pub struct FardelResponse {
     pub sealed: bool,
     pub tags: Vec<String>,
     // returns only latest comments, use GetComments for older comments
-    pub comments: Vec<Comment>,
+    pub comments: Vec<CommentResponse>,
     // total number of comments
     pub number_of_comments: i32,
     pub upvotes: i32,
@@ -486,6 +485,16 @@ pub struct FardelResponse {
     pub seal_time: Option<i32>,
     // unpacked parts
     pub contents_data: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct TxResponse {
+    pub text: String,
+    pub handle: String,
+    // comment id and fardel id is only set if the authenticated user 
+    //   is the commenter (enables deletion)
+    pub fardel_id: Option<Uint128>,
+    pub comment_id: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -517,7 +526,10 @@ pub enum QueryAnswer {
         fardels: Vec<FardelResponse>,
     },
     GetComments {
-        comments: Vec<Comment>,
+        comments: Vec<CommentResponse>,
+    },
+    GetTransactions {
+        txs: Vec<Tx>,
     },
 
     // Authentication error

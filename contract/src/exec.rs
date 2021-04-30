@@ -842,7 +842,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                         let num_packages_left = 0_u16.min(total - next_package);
 
                         // 2. check it has not already been unpacked by the user
-                        if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id) {
+                        if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id).unpacked {
                             status = Failure;
                             msg = Some(String::from("You have already unpacked this fardel."));
                         // 3. check it is not sealed
@@ -1009,7 +1009,7 @@ pub fn try_rate_fardel<S: Storage, A: Api, Q: Querier>(
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
     // check that fardel has been unpacked by the user
-    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
+    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id).unpacked {
         // check if user has already rated it
         if has_rated(&deps.storage, &message_sender, fardel_id) {
             status = Failure;
@@ -1082,7 +1082,7 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
-    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
+    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id).unpacked {
         // fardel has been unpacked by the user
         // add comment
         comment_on_fardel(&mut deps.storage, &message_sender, fardel_id, comment)?;

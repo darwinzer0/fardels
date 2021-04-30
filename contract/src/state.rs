@@ -172,7 +172,7 @@ pub struct StoredFee {
 }
 
 impl StoredFee {
-    pub fn into_stored(self) -> StdResult<Fee> {
+    pub fn into_humanized(self) -> StdResult<Fee> {
         let fee = Fee {
             commission_rate_nom: Uint128(self.commission_rate_nom),
             commission_rate_denom: Uint128(self.commission_rate_denom),
@@ -563,7 +563,7 @@ pub fn store_account<S: Storage>(
     set_bin_data(&mut store, &owner.as_slice(), &account)
 }
 
-pub fn get_account<S: Storage>(
+pub fn get_account<S: ReadonlyStorage>(
     store: &S,
     owner: &CanonicalAddr,
 ) -> StdResult<StoredAccount> {
@@ -889,7 +889,7 @@ pub fn store_account_block<S: Storage>(
 }
 
 // returns true if blocked_addr is blocked by blocker_addr
-pub fn is_blocked_by<S: Storage>(
+pub fn is_blocked_by<S: ReadonlyStorage>(
     storage: &S,
     blocker_addr: &CanonicalAddr,
     blocked_addr: &CanonicalAddr,
@@ -904,7 +904,7 @@ pub fn is_blocked_by<S: Storage>(
 // are stored using multilevel prefixed + appendstore keys: 
 //    b"unpacked" | {unpacker canonical addr} | {appendstore index} -> global fardel id
 //
-//  plus an additional mapping is stored to allow getting unpacked status by global_id:
+//  plus an additional mapping is stored to allow getting unpacked status and package_idx by global_id:
 //    b"id-to-unpacked" | {unpacker canonical addr} | {global fardel id} -> true/false
 //       value == true means it is unpacked, value == false OR no record in storage means packed
 //
@@ -912,6 +912,12 @@ pub fn is_blocked_by<S: Storage>(
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UnpackedFardel {
     pub fardel_id: u128,
+    pub package_idx: u16,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UnpackedStatus {
+    pub unpacked: bool,
     pub package_idx: u16,
 }
 
@@ -929,7 +935,11 @@ pub fn store_unpack<S: Storage>(
         package_idx,
     };
     store.push(&unpacked_fardel)?;
-    map_global_id_to_unpacked_by_unpacker(storage, fardel_id, unpacker, true)
+    let unpacked_status = UnpackedStatus {
+        unpacked: true,
+        package_idx: package_idx,
+    };
+    map_global_id_to_unpacked_by_unpacker(storage, fardel_id, unpacker, unpacked_status)
 }
 
 // stores a mapping from global fardel id to unpacked status in prefixed storage
@@ -937,7 +947,7 @@ fn map_global_id_to_unpacked_by_unpacker<S: Storage>(
     store: &mut S,
     global_id: u128,
     unpacker: &CanonicalAddr,
-    value: bool,
+    value: UnpackedStatus,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], store);
     set_bin_data(&mut store, &global_id.to_be_bytes(), &value)
@@ -948,9 +958,12 @@ pub fn get_unpacked_status_by_fardel_id<S: Storage>(
     storage: &S, 
     unpacker: &CanonicalAddr,
     fardel_id: u128,
-) -> bool {
+) -> UnpackedStatus {
     let mapping_store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], storage);
-    get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
+    get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| UnpackedStatus{
+        unpacked: false,
+        package_idx: 0,
+    })
 }
 
 // gets a list of unpacked fardels for a given unpacker canonical address
@@ -1268,12 +1281,12 @@ pub struct IndexedComment {
 }
 
 pub fn comment_on_fardel<S: Storage>(
-    store: &mut S,
+    storage: &mut S,
     commenter: &CanonicalAddr,
     fardel_id: u128,
     text: String,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], store);
+    let mut store = PrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
     let mut store = AppendStoreMut::attach_or_create(&mut store)?;
     let comment = Comment {
         commenter: commenter.clone(),
@@ -1282,12 +1295,14 @@ pub fn comment_on_fardel<S: Storage>(
     store.push(&comment)
 }
 
-pub fn get_comments<S: Storage>(
+// get paginated comments for a given fardel
+pub fn get_comments<S: ReadonlyStorage>(
     storage: &S,
     fardel_id: u128,
     page: u32,
     page_size: u32,
 ) -> StdResult<Vec<IndexedComment>> {
+    let fardel_owner = get_fardel_owner(storage, fardel_id)?;
     let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
 
     // Try to access the storage of comments for the fardel.
@@ -1316,11 +1331,36 @@ pub fn get_comments<S: Storage>(
                 }
             )
         })
-        .filter(|comment| 
-            !comment_is_deleted(storage, fardel_id, comment.unwrap().idx)
-        )
+        .filter(|comment| {
+            // check if deleted
+            let deleted = comment_is_deleted(storage, fardel_id, comment.unwrap().idx);
+            // check if blocked
+            let blocked = is_blocked_by(storage, &fardel_owner, &comment.unwrap().commenter);
+            !deleted && !blocked
+        })
         .collect();
     comments
+}
+
+// get total number of comments for a fardel
+pub fn get_number_of_comments<S: ReadonlyStorage>(
+    storage: &S,
+    fardel_id: u128,
+) -> u32 {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
+
+    // Try to access the storage of comments for the fardel.
+    // If it doesn't exist yet, return 0.
+    let store_result = if let Some(result) = AppendStore::<Comment, _>::attach(&store) {
+        result
+    } else {
+        return 0_u32;
+    };
+    if store_result.is_ok() {
+        store_result.unwrap().len()
+    } else {
+        0_u32
+    }
 }
 
 pub fn delete_comment<S: Storage>(
@@ -1367,6 +1407,102 @@ pub fn subtract_from_commission_balance<S: Storage>(
         return Err(StdError::generic_err("Cannot subtract more than current commission amount."));
     }
     set_bin_data(storage, KEY_COMMISSION_BALANCE, &(current_amount - amount))
+}
+
+//
+// Transaction record
+//
+//  b"tx" | {owner canonical address} | appendstore | Tx
+//
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Tx {
+    pub fardel_id: Uint128,
+    pub package_idx: i32,
+    pub handle: String,
+    pub amount: Uint128,
+    pub fee: Uint128,
+    pub timestamp: i32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StoredTx {
+    pub fardel_id: u128,
+    pub package_idx: u32,
+    pub unpacker: CanonicalAddr,
+    pub amount: u128,
+    pub fee: u128,
+    pub timestamp: u64,
+}
+
+impl StoredTx {
+    pub fn into_humanized<S: ReadonlyStorage>(self, storage: &S) -> StdResult<Tx> {
+        let fardel = get_fardel_by_id(storage, self.fardel_id)?.unwrap();
+        let unpacker = get_account(storage, &self.unpacker)?;
+        let tx = Tx {
+            fardel_id: fardel.hash_id,
+            package_idx: self.package_idx as i32,
+            handle: String::from_utf8(unpacker.handle).ok().unwrap_or_default(),
+            amount: Uint128(self.amount),
+            fee: Uint128(self.fee),
+            timestamp: self.timestamp as i32,
+        };
+        Ok(tx)
+    }
+}
+
+// returns the index of the appended fardel
+fn append_tx<S: Storage>(
+    storage: &mut S,
+    owner: &CanonicalAddr,
+    unpacker: CanonicalAddr,
+    fardel_id: u128,
+    package_idx: u32,
+    amount: u128,
+    fee: u128,
+    timestamp: u64,
+) -> StdResult<u32> {
+    let mut store = PrefixedStorage::multilevel(&[PREFIX_COMPLETED_TX, owner.as_slice()], storage);
+    let mut store = AppendStoreMut::attach_or_create(&mut store)?;
+    let tx = StoredTx {
+        fardel_id,
+        package_idx,
+        unpacker,
+        amount,
+        fee,
+        timestamp,
+    };
+    store.push(&tx)?;
+    Ok(store.len() - 1)
+}
+
+pub fn get_txs<S: ReadonlyStorage>(
+    storage: &S,
+    owner: &CanonicalAddr,
+    page: u32,
+    page_size: u32,
+) -> StdResult<Vec<Tx>> {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMPLETED_TX, owner.as_slice()], storage);
+
+    // Try to access the storage of txs for the account.
+    // If it doesn't exist yet, return an empty list.
+    let store = if let Some(result) = AppendStore::<StoredTx, _>::attach(&store) {
+        result?
+    } else {
+        return Ok(vec![]);
+    };
+
+    // Take `page_size` txs starting from the latest tx, potentially skipping `page * page_size`
+    // txs from the start.
+    let tx_iter = store
+        .iter()
+        .rev()
+        .skip((page * page_size) as _)
+        .take(page_size as _);
+    // The `and_then` here flattens the `StdResult<StdResult<Tx>>` to an `StdResult<Tx>`
+    let txs: StdResult<Vec<Tx>> = tx_iter
+        .map(|tx| tx.map(|tx| tx.into_humanized(storage)).and_then(|x| x))
+        .collect();
+    txs
 }
 
 //
