@@ -531,6 +531,9 @@ pub enum QueryAnswer {
     GetTransactions {
         txs: Vec<Tx>,
     },
+    GetUnpacked {
+        fardels: Vec<FardelResponse>,
+    },
 
     // Authentication error
     ViewingKeyError {

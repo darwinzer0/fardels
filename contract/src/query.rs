@@ -16,6 +16,7 @@ use crate::state::{get_account, get_account_for_handle,
     get_upvotes, get_downvotes, 
     get_comments, get_number_of_comments,
     Tx, get_txs,
+    get_unpacked_by_unpacker,
 };
 
 pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
@@ -335,5 +336,60 @@ pub fn query_get_followers<S: Storage, A: Api, Q: Querier>(
 
     let followers: Vec<String> = get_followers(&deps.api, &deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
     let response = QueryAnswer::GetFollowers { followers };
+    to_binary(&response)
+}
+
+pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    account: &HumanAddr,
+    page: Option<i32>,
+    page_size: Option<i32>,
+) -> StdResult<Binary> {
+    let address = deps.api.canonical_address(account)?;
+    let page = page.unwrap_or_else(|| 0_i32) as u32;
+    let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
+
+    let unpacked_ids: Vec<u128> = get_unpacked_by_unpacker(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
+    let mut fardels: Vec<FardelResponse> = vec![];
+    for unpack_id in unpacked_ids {
+        let fardel = get_fardel_by_id(&deps.storage, unpack_id)?;
+        if fardel.is_some() {
+            let fardel = fardel.unwrap();
+            let upvotes: i32 = get_upvotes(&deps.storage, unpack_id) as i32;
+            let downvotes: i32 = get_downvotes(&deps.storage, unpack_id) as i32;
+            // don't get comments
+            let comments: Vec<CommentResponse> = vec![];
+
+            let number_of_comments = get_number_of_comments(&deps.storage, unpack_id) as i32;
+
+            // we know they are unpacked but we need package_idx
+            let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, &address, unpack_id);
+            let contents_data = Some(fardel.contents_data[unpacked_status.package_idx as usize]);
+
+            let timestamp: i32 = fardel.timestamp as i32;
+            let seal_time: Option<i32> = None;
+            if fardel.seal_time > 0 {
+                seal_time = Some(fardel.seal_time as i32);
+            }
+            let sealed = get_sealed_status(&deps.storage, unpack_id);
+
+            fardels.push(FardelResponse {
+                id: fardel.hash_id,
+                public_message: fardel.public_message.clone(),
+                tags: fardel.tags,
+                cost: fardel.cost.amount,
+                unpacked: true,
+                upvotes,
+                downvotes,
+                number_of_comments,
+                comments,
+                seal_time,
+                sealed,
+                timestamp,
+                contents_data,
+            });
+        }
+    }
+    let response = QueryAnswer::GetUnpacked { fardels };
     to_binary(&response)
 }
