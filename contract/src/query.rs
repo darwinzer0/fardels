@@ -329,8 +329,11 @@ pub fn query_get_followers<S: Storage, A: Api, Q: Querier>(
     page: Option<i32>,
     page_size: Option<i32>,
 ) -> StdResult<Binary> {
-    //TODO: FIX
-    //let followers = vec![];
+    let address = deps.api.canonical_address(account)?;
+    let page = page.unwrap_or_else(|| 0_i32) as u32;
+    let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
+
+    let followers: Vec<String> = get_followers(&deps.api, &deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
     let response = QueryAnswer::GetFollowers { followers };
     to_binary(&response)
 }
