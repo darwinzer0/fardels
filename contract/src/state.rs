@@ -1385,7 +1385,7 @@ pub fn get_comments<S: ReadonlyStorage>(
             )
         })
         .filter(|comment| {
-            let comment: IndexedComment = comment.clone().unwrap();
+            let comment = comment.as_ref().unwrap();
             // check if deleted
             let deleted = comment_is_deleted(storage, fardel_id, comment.idx);
             // check if blocked
