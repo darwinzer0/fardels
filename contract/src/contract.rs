@@ -21,10 +21,12 @@ use crate::query::{
     query_get_fardel_by_id, query_get_fardels,
     query_get_following, query_get_followers, query_get_handle,
     query_get_profile, query_is_handle_available, query_get_comments,
-    query_get_transactions,
+    query_get_transactions, query_get_unpacked,
+    query_get_pending_unpacks,
+    query_get_fardels_batch,
 };
 use crate::state::{
-    Config, Constants, read_viewing_key, is_banned,
+    Config, ReadonlyConfig, Constants, read_viewing_key, is_banned,
 };
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
@@ -220,7 +222,7 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
         } else if key.check_viewing_key(expected_key.unwrap().as_slice()) {
 
             // permission check to make sure not banned (admin cannot be banned accidentally)
-            let constants = Config::from_storage(&mut deps.storage).constants()?;
+            let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
             if (canonical_addr != constants.admin) && (is_banned(&deps.storage, &canonical_addr)) {
                 return Err(StdError::unauthorized());
             }
@@ -241,12 +243,12 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
                     query_get_fardels(&deps, &Some(address), handle, page, page_size),
                 QueryMsg::GetUnpacked { address, page, page_size, .. } =>
                     query_get_unpacked(&deps, &address, page, page_size),
-                QueryMsg::GetPendingUnpacks { address, page, page_size, .. } =>
-                    query_get_pending_unpacks(&deps, &address, page, page_size),
+                QueryMsg::GetPendingUnpacks { address, number, .. } =>
+                    query_get_pending_unpacks(&deps, &address, number),
                 QueryMsg::GetCommentsAuth { address, fardel_id, page, page_size, .. } =>
                     query_get_comments(&deps, &Some(address), fardel_id, page, page_size),
-                QueryMsg::GetFardelsBatch { address, page, page_size, .. } =>
-                    query_get_fardels_batch(&deps, &address, page, page_size),
+                QueryMsg::GetFardelsBatch { address, start, count, .. } =>
+                    query_get_fardels_batch(&deps, &address, start, count),
                 _ => panic!("This query type does not require authentication"),
             };
         }

@@ -139,15 +139,10 @@ pub fn valid_max_description_len(val: Option<i32>) -> StdResult<u16> {
 }
 
 // check valid seal time for a fardel
-pub fn valid_seal_time(current_time: u64, val: Option<i32>) -> StdResult<u64> {
+pub fn valid_seal_time(val: Option<i32>) -> StdResult<u64> {
     match val {
         Some(v) => {
-            let seal_time = u64::try_from(v).or_else(|_| Err(StdError::generic_err("invalid seal_time")));
-            if seal_time.is_ok() && (current_time < seal_time.unwrap()) {
-                Err(StdError::generic_err("seal_time cannot be in the past"))
-            } else {
-                seal_time
-            }
+            u64::try_from(v).or_else(|_| Err(StdError::generic_err("invalid seal_time")))
         },
         None => Ok(0_u64)
     }

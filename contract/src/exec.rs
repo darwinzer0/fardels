@@ -23,7 +23,8 @@ use crate::state::{Config, ReadonlyConfig,
     get_pending_unpacks_from_start,
     has_rated, set_rated, get_rating, remove_rated, 
     subtract_upvote_fardel, subtract_downvote_fardel,
-    add_upvote_fardel, add_downvote_fardel, comment_on_fardel, delete_comment,
+    add_upvote_fardel, add_downvote_fardel, 
+    comment_on_fardel, delete_comment, get_comment_by_id,
     write_viewing_key, get_commission_balance,
     is_blocked_by,
 };
@@ -136,8 +137,8 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
     let mut status = Success;
     let mut msg = None;
 
-    let mut config = Config::from_storage(&mut deps.storage);
-    let mut constants = config.constants()?;
+    let config = Config::from_storage(&mut deps.storage);
+    let constants = config.constants()?;
 
     // permission check
     if deps.api.canonical_address(&env.message.sender)? != constants.admin {
@@ -152,9 +153,10 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
             banned
         );
     } else if handle.is_some() { // otherwise use handle
+        let account = get_account_for_handle(&deps.storage, &handle.unwrap())?;
         store_account_ban(
             &mut deps.storage,
-            &get_account_for_handle(&deps.storage, &handle.unwrap())?,
+            &account,
             banned
         );
     } else {
@@ -183,11 +185,11 @@ pub fn try_draw_commission<S: Storage, A: Api, Q: Querier>(
     address: Option<HumanAddr>,
     amount: Option<Uint128>,
 ) -> StdResult<HandleResponse> {
-    let mut status = Success;
-    let mut msg = None;
+    let status = Success;
+    let msg = None;
 
-    let mut config = Config::from_storage(&mut deps.storage);
-    let mut constants = config.constants()?;
+    let config = Config::from_storage(&mut deps.storage);
+    let constants = config.constants()?;
 
     // permission check
     if deps.api.canonical_address(&env.message.sender)? != constants.admin {
@@ -207,7 +209,7 @@ pub fn try_draw_commission<S: Storage, A: Api, Q: Querier>(
     let mut messages: Vec<CosmosMsg> = vec![];
     messages.push(CosmosMsg::Bank(BankMsg::Send {
         from_address: env.contract.address.clone(),
-        to_address: address,
+        to_address: address.clone(),
         amount: vec![Coin {
             denom: DENOM.to_string(),
             amount: Uint128(amount),
@@ -217,7 +219,7 @@ pub fn try_draw_commission<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages,
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::DrawCommission { status, msg, amount: Uint128(amount), address })?),
+        data: Some(to_binary(&HandleAnswer::DrawCommission { status, msg, amount: Uint128(amount), address: address.clone() })?),
     })
 }
 
@@ -474,8 +476,8 @@ pub fn try_store_deactivate<S: Storage, A: Api, Q: Querier>(
     env: Env,
     deactivated: bool,
 ) -> StdResult<HandleResponse> {
-    let mut status = Success;
-    let mut msg = None;
+    let status = Success;
+    let msg = None;
 
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
@@ -537,7 +539,7 @@ pub fn try_follow<S: Storage, A: Api, Q: Querier>(
     handle: String,
 ) -> StdResult<HandleResponse> {
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    store_following(&deps.api, &mut deps.storage, &message_sender, handle)?;
+    store_following(&mut deps.storage, &message_sender, handle)?;
 
     Ok(HandleResponse {
         messages: vec![],
@@ -554,7 +556,7 @@ pub fn try_unfollow<S: Storage, A: Api, Q: Querier>(
     handle: String,
 ) -> StdResult<HandleResponse> {
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    remove_following(&deps.api, &mut deps.storage, &message_sender, handle)?;
+    remove_following(&mut deps.storage, &message_sender, handle)?;
 
     Ok(HandleResponse {
         messages: vec![],
@@ -586,7 +588,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     let constants = config.constants()?;
 
     let mut tag_size_ok = true;
-    for tag in tags {
+    for tag in tags.clone() {
         if tag.as_bytes().len() > constants.max_tag_len.into() {
             tag_size_ok = false;
             break;
@@ -618,7 +620,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
         status = Failure;
         msg = Some(String::from("Invalid fardel data"));
     } else {
-        let stored_seal_time = valid_seal_time(env.block.time, seal_time)?;
+        let stored_seal_time = valid_seal_time(seal_time)?;
 
         let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
@@ -659,7 +661,6 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
             fardel.cost, fardel.countable, fardel.approval_req, 
             fardel.seal_time, fardel.timestamp,
         )?;
-        let config = ReadonlyConfig::from_storage(&deps.storage);
         fardel_id = Some(Uint128(fardel.hash_id));
     }
     
@@ -718,7 +719,7 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
     let mut msg: Option<String> = None;
     let number = number.unwrap_or_else(|| 10_i32);
 
-    let owner = deps.api.canonical_address(&env.message.sender)?;
+    let owner = deps.api.canonical_address(&env.message.sender.clone())?;
     let mut messages: Vec<CosmosMsg> = vec![];
 
     if number < 1 {
@@ -729,7 +730,7 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
         let pending_unpacks: Vec<PendingUnpack> = pending_unpacks.into_iter().filter(|pu| !pu.canceled).collect();
 
         let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
-        let total_commission: u128 = 0;
+        let mut total_commission: u128 = 0;
 
         for pending_unpack in pending_unpacks {
             // complete the unpack
@@ -770,7 +771,7 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
             // push payment
             messages.push(CosmosMsg::Bank(BankMsg::Send {
                 from_address: env.contract.address.clone(),
-                to_address: env.message.sender,
+                to_address: env.message.sender.clone(),
                 amount: vec![Coin {
                     denom: DENOM.to_string(),
                     amount: Uint128(payment_amount.low_u128()),
@@ -808,7 +809,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     fardel_id: Uint128,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
-    let mut pending: bool = false;
+    let pending: bool = false;
     let mut msg: Option<String> = None;
     let mut contents_data: Option<String> = None;
     let mut cost: u128 = 0;
@@ -817,7 +818,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     let fardel_id = fardel_id.u128();
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
-    let sent_coins = env.message.sent_funds;
+    let sent_coins = env.message.sent_funds.clone();
     if sent_coins[0].denom != DENOM {
         status = Failure;
         msg = Some(String::from("Wrong denomination."))
@@ -873,13 +874,13 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                                     &message_sender, 
                                     global_id, 
                                     next_package,
-                                    sent_coins[0],
+                                    env.message.sent_funds[0].clone(),
                                     env.block.time,
                                 )?;
                                 msg = Some(String::from("Fardel unpack is pending approval by owner."));
                             } else {
                                 store_unpack(&mut deps.storage, &message_sender, global_id, next_package)?;
-                                contents_data = Some(f.contents_data[next_package as usize]);
+                                contents_data = Some(f.contents_data[next_package as usize].clone());
                             }
 
                             // both pending and completed unpacks use up a countable package
@@ -1127,13 +1128,20 @@ pub fn try_delete_comment<S: Storage, A: Api, Q: Querier>(
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
+
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
     if comment_id < 0 {
         status = Failure;
         msg = Some(String::from("invalid comment_id"));
     } else {
-        delete_comment(&mut deps.storage, fardel_id, comment_id as u32)?;
+        let comment = get_comment_by_id(&deps.storage, fardel_id, comment_id as u32)?;
+        if comment.commenter == message_sender {
+            delete_comment(&mut deps.storage, fardel_id, comment_id as u32)?;
+        } else {
+            status = Failure;
+            msg = Some(String::from("cannot delete another user's comment"));
+        }
     }
 
     Ok(HandleResponse {

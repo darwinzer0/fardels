@@ -413,8 +413,7 @@ pub enum QueryMsg {
     GetPendingUnpacks {
         address: HumanAddr,
         key: String,
-        page: Option<i32>,
-        page_size: Option<i32>,
+        number: Option<i32>,
     },
     // Get paginated list of comments for the given fardel, as a logged in user
     GetCommentsAuth {
@@ -434,8 +433,8 @@ pub enum QueryMsg {
         // must match admin
         address: HumanAddr,
         key: String,
-        page: Option<i32>,
-        page_size: Option<i32>,
+        start: Option<Uint128>,
+        count: Option<Uint128>,
     },
 }
 
@@ -488,13 +487,9 @@ pub struct FardelResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TxResponse {
-    pub text: String,
+pub struct PendingUnpackResponse {
     pub handle: String,
-    // comment id and fardel id is only set if the authenticated user 
-    //   is the commenter (enables deletion)
-    pub fardel_id: Option<Uint128>,
-    pub comment_id: Option<i32>,
+    pub fardel_id: Uint128,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -532,6 +527,12 @@ pub enum QueryAnswer {
         txs: Vec<Tx>,
     },
     GetUnpacked {
+        fardels: Vec<FardelResponse>,
+    },
+    GetPendingUnpacks {
+        pending: Vec<PendingUnpackResponse>,
+    },
+    GetFardelsBatch {
         fardels: Vec<FardelResponse>,
     },
 

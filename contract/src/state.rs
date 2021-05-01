@@ -704,8 +704,7 @@ pub struct Follower {
     pub active: bool,
 }
 
-pub fn store_following<A: Api, S: Storage>(
-    api: &A,
+pub fn store_following<S: Storage>(
     storage: &mut S,
     owner: &CanonicalAddr,
     handle: String,
@@ -714,21 +713,39 @@ pub fn store_following<A: Api, S: Storage>(
 
     // save following relation
 
-    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    // get length of following appendstore
+    let vec_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+    let vec_storage = if let Some(result) = AppendStore::<Following, _>::attach(&vec_storage) {
+        result?
+    } else {
+        return Ok(vec![]);
+    };
+    let vec_storage_len = vec_storage.len();
+
+    let link_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+
+    // get current idx or add to end
+    let idx: u32 = get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage_len);
+    // prepare following relationship
+    let following = Following {
+        who: followed_addr.clone(),
+        active: true,
+    };
+
+    // now store the following relation
+
     let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
     let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
     
-    // get current idx or add to end
-    let idx: u32 = get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage.len());
-    let following = Following {
-        who: followed_addr,
-        active: true,
-    };
-    if idx == vec_storage.len() {
+    if idx == vec_storage_len {
         vec_storage.push(&following);
-        set_bin_data(&mut link_storage, followed_addr.as_slice(), &idx)?;
     } else {
         vec_storage.set_at(idx, &following)?;
+    }
+
+    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    if idx == vec_storage_len {
+        set_bin_data(&mut link_storage, followed_addr.as_slice(), &idx)?;
     }
     
     // save follower relation
@@ -749,24 +766,16 @@ pub fn store_following<A: Api, S: Storage>(
         vec_storage.set_at(idx, &follower)?;
     }
     Ok(())
-
-    //let store = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    //let mut following: Vec<HumanAddr> = get_bin_data(&store, owner.as_slice()).unwrap_or_else(|_| vec![]);
-    //let followed: HumanAddr = api.human_address(&get_account_for_handle(storage, &handle)?)?;
-    //following.push(followed);
-    //let mut store = PrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    //set_bin_data(&mut store, owner.as_slice(), &following)
 }
 
-pub fn remove_following<A: Api, S: Storage>(
-    api: &A,
+pub fn remove_following<S: Storage>(
     storage: &mut S,
     owner: &CanonicalAddr,
     handle: String,
 ) -> StdResult<()> {
     let followed_addr = get_account_for_handle(storage, &handle)?;
 
-    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    let link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
     let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
     let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
 
@@ -793,13 +802,6 @@ pub fn remove_following<A: Api, S: Storage>(
         vec_storage.set_at(idx, &follower)?;
     } 
     Ok(())
-
-    //let store = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    //let mut following: Vec<HumanAddr> = get_bin_data(&store, owner.as_slice()).unwrap_or_else(|_| vec![]);
-    //let followed: HumanAddr = api.human_address(&get_account_for_handle(storage, &handle)?)?;
-    //following.retain(|x| x != &followed);
-    //let mut store = PrefixedStorage::new(PREFIX_FOLLOWING, storage);
-    //set_bin_data(&mut store, owner.as_slice(), &following)
 }
 
 // returns a vec of handles
@@ -1005,6 +1007,7 @@ pub fn get_unpacked_by_unpacker<S: Storage>(
 // with
 //   b"pending-start" | {owner canonical addr} | index
 //
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PendingUnpack {
     pub fardel_id: u128,
@@ -1361,6 +1364,22 @@ pub fn get_number_of_comments<S: ReadonlyStorage>(
     } else {
         0_u32
     }
+}
+
+pub fn get_comment_by_id<S: ReadonlyStorage>(
+    storage: &S,
+    fardel_id: u128,
+    comment_id: u32,
+) -> StdResult<Comment> {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
+    // Try to access the storage of comments for the fardel.
+    // If it doesn't exist yet, return 0.
+    let store = if let Some(result) = AppendStore::<Comment, _>::attach(&store) {
+        result?
+    } else {
+        return Err(StdError::generic_err("no comment at that index for that fardel."));
+    };
+    store.get_at(comment_id)
 }
 
 pub fn delete_comment<S: Storage>(
