@@ -744,7 +744,7 @@ fn save_following_relation<S: Storage>(
     let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
     
     if idx == vec_storage_len {
-        vec_storage.push(&following);
+        vec_storage.push(&following)?;
     } else {
         vec_storage.set_at(idx, &following)?;
     }
@@ -777,7 +777,7 @@ fn save_follower_relation<S: Storage>(
     let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
     let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
     if idx == vec_storage_len {
-        vec_storage.push(&follower);
+        vec_storage.push(&follower)?;
     } else {
         vec_storage.set_at(idx, &follower)?;
     }

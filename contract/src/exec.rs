@@ -94,7 +94,7 @@ pub fn try_set_constants<S: Storage, A: Api, Q: Querier>(
     if max_profile_img_size.is_some() {
         constants.max_profile_img_size = valid_max_thumbnail_img_size(max_profile_img_size)?;
     }
-    config.set_constants(&constants);
+    config.set_constants(&constants)?;
 
     Ok(HandleResponse {
         messages: vec![],
@@ -118,7 +118,7 @@ pub fn try_change_admin<S: Storage, A: Api, Q: Querier>(
 
     constants.admin = deps.api.canonical_address(&new_admin)?;
 
-    config.set_constants(&constants);
+    config.set_constants(&constants)?;
 
     Ok(HandleResponse {
         messages: vec![],
@@ -151,14 +151,14 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
             &mut deps.storage, 
             &deps.api.canonical_address(&address.unwrap())?, 
             banned
-        );
+        )?;
     } else if handle.is_some() { // otherwise use handle
         let account = get_account_for_handle(&deps.storage, &handle.unwrap())?;
         store_account_ban(
             &mut deps.storage,
             &account,
             banned
-        );
+        )?;
     } else {
         status = Failure;
         msg = Some(String::from("No handle or address given."));
