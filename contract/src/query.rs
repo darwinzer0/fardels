@@ -13,7 +13,7 @@ use crate::state::{
     get_account_img,
     Fardel, get_fardel_by_id, get_fardel_by_hash,
     get_fardels, get_sealed_status,
-    get_following, get_followers,
+    get_following, get_followers, is_following,
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
     get_comments, get_number_of_comments,
@@ -324,6 +324,18 @@ pub fn query_get_following<S: Storage, A: Api, Q: Querier>(
 
     let following: Vec<String> = get_following(&deps.api, &deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
     let response = QueryAnswer::GetFollowing { following };
+    to_binary(&response)
+}
+
+pub fn query_get_follows<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    account: &HumanAddr,
+    handle: String,
+) -> StdResult<Binary> {
+    let address = deps.api.canonical_address(account)?;
+    let followed_addr = get_account_for_handle(&deps.storage, &handle)?;
+    let following = is_following(&deps.storage, &address, &followed_addr);
+    let response = QueryAnswer::GetFollows { response: following };
     to_binary(&response)
 }
 

@@ -381,6 +381,12 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
+    // Get whether the logged in user is following a given handle
+    GetFollows {
+        address: HumanAddr,
+        key: String,
+        handle: String,
+    },
     // Get logged in user's list of followers
     GetFollowers {
         address: HumanAddr,
@@ -444,6 +450,7 @@ impl QueryMsg {
             Self::GetTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetHandle { address, key } => (vec![address], ViewingKey(key.clone())),
             Self::GetFollowing { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetFollows { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFollowers { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelByIdAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
@@ -507,6 +514,9 @@ pub enum QueryAnswer {
     },
     GetFollowing {
         following: Vec<String>,
+    },
+    GetFollows {
+        response: bool,
     },
     GetFollowers {
         followers: Vec<String>,

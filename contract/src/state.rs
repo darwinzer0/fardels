@@ -716,6 +716,27 @@ pub fn store_following<S: Storage>(
     Ok(())
 }
 
+pub fn is_following<S: ReadonlyStorage>(
+    storage: &S,
+    owner: &CanonicalAddr,
+    followed_addr: &CanonicalAddr,
+) -> bool {
+    let link_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    let result: StdResult<u32> = get_bin_data(&link_storage, &followed_addr.as_slice());
+    match result {
+        Ok(_) => {
+            let vec_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+            let store = if let Some(result) = AppendStore::<Following, _>::attach(&store) {
+                result?
+            } else {
+                return Ok(vec![]);
+            };
+            true
+        },
+        Err(_) => false,
+    }
+}
+
 fn save_following_relation<S: Storage>(
     storage: &mut S,
     owner: &CanonicalAddr,
