@@ -327,7 +327,7 @@ pub fn query_get_following<S: Storage, A: Api, Q: Querier>(
     to_binary(&response)
 }
 
-pub fn query_get_follows<S: Storage, A: Api, Q: Querier>(
+pub fn query_is_following<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account: &HumanAddr,
     handle: String,
@@ -335,7 +335,7 @@ pub fn query_get_follows<S: Storage, A: Api, Q: Querier>(
     let address = deps.api.canonical_address(account)?;
     let followed_addr = get_account_for_handle(&deps.storage, &handle)?;
     let following = is_following(&deps.storage, &address, &followed_addr);
-    let response = QueryAnswer::GetFollows { response: following };
+    let response = QueryAnswer::IsFollowing { response: following };
     to_binary(&response)
 }
 

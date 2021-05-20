@@ -726,7 +726,7 @@ pub fn is_following<S: ReadonlyStorage>(
     match result {
         Ok(index) => {
             let vec_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
-            let res = if let Some(vec_store_result) = AppendStore::<Following, _>::attach(&vec_storage) {
+            if let Some(vec_store_result) = AppendStore::<Following, _>::attach(&vec_storage) {
                 let following = vec_store_result.unwrap().get_at(index);
                 match following {
                     Ok(f) => return f.active,
