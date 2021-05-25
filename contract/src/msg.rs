@@ -508,6 +508,22 @@ pub enum QueryAnswer {
         description: Option<String>,
         img: Option<Binary>,
     },
+    IsHandleAvailable {
+        response: bool,
+    },
+    GetFardelById {
+        fardel: FardelResponse,
+    },
+    GetFardels {
+        fardels: Vec<FardelResponse>,
+    },
+    GetComments {
+        comments: Vec<CommentResponse>,
+    },
+
+    GetTransactions {
+        txs: Vec<Tx>,
+    },
     GetHandle {
         status: ResponseStatus,
         handle: Option<String>,
@@ -521,21 +537,7 @@ pub enum QueryAnswer {
     GetFollowers {
         followers: Vec<String>,
     },
-    IsHandleAvailable {
-        response: bool,
-    },
-    GetFardelById {
-        fardel: FardelResponse,
-    },
-    GetFardels {
-        fardels: Vec<FardelResponse>,
-    },
-    GetComments {
-        comments: Vec<CommentResponse>,
-    },
-    GetTransactions {
-        txs: Vec<Tx>,
-    },
+
     GetUnpacked {
         fardels: Vec<FardelResponse>,
     },
