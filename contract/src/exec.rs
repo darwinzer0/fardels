@@ -539,6 +539,7 @@ pub fn try_follow<S: Storage, A: Api, Q: Querier>(
     handle: String,
 ) -> StdResult<HandleResponse> {
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
+    // TODO: check if blocked
     store_following(&mut deps.storage, &message_sender, handle)?;
 
     Ok(HandleResponse {

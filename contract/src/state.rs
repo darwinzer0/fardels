@@ -315,7 +315,7 @@ pub fn store_fardel<S: Storage>(
     let index: u32 = append_fardel(store, &owner, fardel.clone())?;
     map_global_id_to_fardel(store, global_id.clone(), &owner, index)?;
     map_hash_id_to_global_id(store, hash_id, global_id.clone())?;
-    store_fardel_next_package(store, global_id.clone(), 0_16)?;
+    store_fardel_next_package(store, global_id.clone(), 0_u16)?;
 
     // automatically unpack for the owner
     // TODO: make so can just view own fardels without unpacking
