@@ -59,6 +59,12 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
 ) -> QueryResult {
     let fardel_id = fardel_id.u128();
     let fardel = get_fardel_by_hash(&deps.storage, fardel_id)?;
+    //let fardel = match get_fardel_by_hash(&deps.storage, fardel_id) {
+    //    Ok(fardel) => { fardel },
+    //    Err(_) => {
+    //        return Err(StdError::generic_err(format!("fail to get fardel by hash id {}", fardel_id)));
+    //    }
+    //};
     let fardel = match fardel {
         Some(fardel) => { fardel },
         None => { 

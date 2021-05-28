@@ -15,7 +15,7 @@ use crate::state::{Config, ReadonlyConfig,
     store_account, store_account_img, store_account_ban, store_account_block,
     Fardel, get_fardel_by_hash, get_fardel_owner, seal_fardel, store_fardel, 
     get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
-    get_global_id_by_hash,
+    get_global_id_by_hash, get_total_fardel_count,
     store_following, remove_following,
     store_account_deactivated,
     PendingUnpack, cancel_pending_unpack,
@@ -630,7 +630,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
         let mut hash_data = Vec::with_capacity(hash_data_len);
         hash_data.extend_from_slice(&env.block.height.to_be_bytes());
         hash_data.extend_from_slice(&cost.u128().to_be_bytes());
-        hash_data.extend_from_slice(&config.fardel_count().to_be_bytes());
+        hash_data.extend_from_slice(&get_total_fardel_count(&deps.storage).to_be_bytes());
         hash_data.extend_from_slice(&env.message.sender.0.as_bytes());
         hash_data.extend_from_slice(&public_message.as_bytes());
         let hash_id = hash128_with_seed(&hash_data, env.block.time);

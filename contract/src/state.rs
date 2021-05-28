@@ -105,10 +105,6 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfig<'a, S> {
     pub fn constants(&self) -> StdResult<Constants> {
         self.as_readonly().constants()
     }
-
-    pub fn fardel_count(&self) -> u128 {
-        self.as_readonly().fardel_count()
-    }
 }
 
 pub struct Config<'a, S: Storage> {
@@ -133,14 +129,6 @@ impl<'a, S: Storage> Config<'a, S> {
     pub fn set_constants(&mut self, constants: &Constants) -> StdResult<()> {
         set_bin_data(&mut self.storage, KEY_CONSTANTS, constants)
     }
-
-    pub fn fardel_count(&self) -> u128 {
-        self.as_readonly().fardel_count()
-    }
-
-    pub fn set_fardel_count(&mut self, count: u128) -> StdResult<()> {
-        set_bin_data(&mut self.storage, KEY_FARDEL_COUNT, &count)
-    }
 }
 
 /// This struct refactors out the readonly methods that we need for `Config` and `ReadonlyConfig`
@@ -160,9 +148,6 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
             .map_err(|e| StdError::serialize_err(type_name::<Constants>(), e))
     }
 
-    pub fn fardel_count(&self) -> u128 {
-        get_bin_data(self.0, KEY_FARDEL_COUNT).unwrap_or_default()
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -292,6 +277,12 @@ pub struct GlobalIdFardelMapping {
     pub index: u32,
 }
 
+pub fn get_total_fardel_count<S: ReadonlyStorage>(
+    storage: &S
+) -> u128 {
+    get_bin_data(storage, KEY_FARDEL_COUNT).unwrap_or_else(|_| 0_u128)
+}
+
 pub fn store_fardel<S: Storage>(
     store: &mut S,
     hash_id: u128,
@@ -305,13 +296,12 @@ pub fn store_fardel<S: Storage>(
     seal_time: u64,
     timestamp: u64,
 ) -> StdResult<()> {
-    let mut config = Config::from_storage(store);
-    let global_id = config.fardel_count();
-    config.set_fardel_count(global_id + 1)?;
+    //let mut config = Config::from_storage(store);
+    let global_id: u128 = get_total_fardel_count(store);
 
     let fardel = StoredFardel {
-        global_id,
-        hash_id,
+        global_id: global_id.clone(),
+        hash_id: hash_id.clone(),
         public_message: public_message.clone(),
         tags: tags.clone(),
         contents_data: contents_data.clone(),
@@ -322,15 +312,20 @@ pub fn store_fardel<S: Storage>(
         timestamp,
     };
 
-    let index = append_fardel(store, &owner, fardel.clone())?;
-    map_global_id_to_fardel(store, global_id, &owner, index)?;
-    map_hash_id_to_global_id(store, hash_id, global_id)?;
-    store_fardel_next_package(store, global_id, 0_16)?;
+    let index: u32 = append_fardel(store, &owner, fardel.clone())?;
+    map_global_id_to_fardel(store, global_id.clone(), &owner, index)?;
+    map_hash_id_to_global_id(store, hash_id, global_id.clone())?;
+    store_fardel_next_package(store, global_id.clone(), 0_16)?;
 
     // automatically unpack for the owner
+    // TODO: make so can just view own fardels without unpacking
     for (i, _) in contents_data.iter().enumerate() {
-        store_unpack(store, &owner, global_id, i as u16)?;
+        store_unpack(store, &owner, global_id.clone(), i as u16)?;
     }
+
+    // update global fardel count
+    set_bin_data(store, KEY_FARDEL_COUNT, &(global_id + 1))?;
+
     Ok(())
 }
 
@@ -340,10 +335,11 @@ fn append_fardel<S: Storage>(
     owner: &CanonicalAddr,
     fardel: StoredFardel,
 ) -> StdResult<u32> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_FARDELS, owner.as_slice()], store);
-    let mut store = AppendStoreMut::attach_or_create(&mut store)?;
-    store.push(&fardel)?;
-    Ok(store.len() - 1)
+    let mut storage = PrefixedStorage::multilevel(&[PREFIX_FARDELS, owner.as_slice()], store);
+    let mut storage = AppendStoreMut::<StoredFardel, _>::attach_or_create(&mut storage)?;
+    let idx = storage.len();
+    storage.push(&fardel)?;
+    Ok(idx)
 }
 
 // stores a mapping from global fardel id to fardel in prefixed storage
@@ -353,12 +349,12 @@ fn map_global_id_to_fardel<S: Storage>(
     owner: &CanonicalAddr,
     index: u32,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::new(PREFIX_ID_FARDEL_MAPPINGS, store);
+    let mut storage = PrefixedStorage::new(PREFIX_ID_FARDEL_MAPPINGS, store);
     let mapping = GlobalIdFardelMapping {
         owner: owner.clone(),
         index
     };
-    set_bin_data(&mut store, &global_id.to_be_bytes(), &mapping)
+    set_bin_data(&mut storage, &global_id.to_be_bytes(), &mapping)
 }
 
 //
@@ -367,11 +363,11 @@ fn map_global_id_to_fardel<S: Storage>(
 //   b"next" | {fardel global_id} | {next package idx}
 //
 pub fn store_fardel_next_package<S: Storage>(
-    storage: &mut S,
+    store: &mut S,
     fardel_id: u128,
     next_package: u16,
 ) -> StdResult<()> {
-    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NEXT_PACKAGE, storage);
+    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NEXT_PACKAGE, store);
     set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &next_package)
 }
 
@@ -387,12 +383,12 @@ pub fn get_fardel_next_package<S: ReadonlyStorage>(
 //   users see hash ids only. 
 //   Admin can access fardels directly by global (sequential) id for indexing.
 fn map_hash_id_to_global_id<S: Storage>(
-    storage: &mut S,
+    store: &mut S,
     hash_id: u128,
     global_id: u128,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, storage);
-    set_bin_data(&mut store, &hash_id.to_be_bytes(), &global_id)
+    let mut storage = PrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, store);
+    set_bin_data(&mut storage, &hash_id.to_be_bytes(), &global_id)
 }
 
 pub fn get_fardel_owner<S: ReadonlyStorage>(
@@ -410,6 +406,10 @@ pub fn get_fardel_by_id<S: ReadonlyStorage>(
 ) -> StdResult<Option<Fardel>> {
     let mapping_store = ReadonlyPrefixedStorage::new(PREFIX_ID_FARDEL_MAPPINGS, storage);
     let mapping: GlobalIdFardelMapping = get_bin_data(&mapping_store, &fardel_id.to_be_bytes())?;
+    //let mapping: GlobalIdFardelMapping = match get_bin_data(&mapping_store, &fardel_id.to_be_bytes()) {
+    //    Ok(m) => m,
+    //    _ => { return Err(StdError::generic_err(format!("could not get fardel mapping for global id {}", fardel_id))); }
+    //};
 
     let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FARDELS, mapping.owner.as_slice()], storage);
     // Try to access the storage of fardels for the account.
@@ -420,7 +420,11 @@ pub fn get_fardel_by_id<S: ReadonlyStorage>(
         return Ok(None);
     };
 
-    let stored_fardel: StoredFardel = store.get_at(mapping.index)?;
+    //let stored_fardel: StoredFardel = store.get_at(mapping.index)?;
+    let stored_fardel: StoredFardel = match store.get_at(mapping.index) {
+        Ok(f) => f,
+        _ => { return Err(StdError::generic_err(format!("could not get stored fardel for global id {}", fardel_id)));}, 
+    };
     let fardel: Fardel = stored_fardel.into_humanized()?;
     Ok(Some(fardel))
 }
@@ -434,12 +438,15 @@ pub fn get_global_id_by_hash<S: ReadonlyStorage>(
 }
 
 pub fn get_fardel_by_hash<S: ReadonlyStorage>(
-    storage: &S,
+    store: &S,
     hash: u128,
 ) -> StdResult<Option<Fardel>> {
-    let storage = ReadonlyPrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, storage);
-    let global_id: u128 = get_bin_data(&storage, &hash.to_be_bytes())?;
-    get_fardel_by_id(&storage, global_id)
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, store);
+    let global_id: u128 = match get_bin_data(&storage, &hash.to_be_bytes()) {
+        Ok(id) => id,
+        _ => { return Err(StdError::generic_err(format!("could not get global_id for hash_id {}", hash))); }
+    };
+    get_fardel_by_id(store, global_id)
 }
 
 pub fn get_fardel_owner_by_hash<S: ReadonlyStorage>(
@@ -765,7 +772,7 @@ fn save_following_relation<S: Storage>(
     // now store the following relation
 
     let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
-    let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
+    let mut vec_storage = AppendStoreMut::<Following, _>::attach_or_create(&mut vec_storage)?;
     
     if idx == vec_storage_len {
         vec_storage.push(&following)?;
@@ -799,7 +806,7 @@ fn save_follower_relation<S: Storage>(
     };
 
     let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
-    let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
+    let mut vec_storage = AppendStoreMut::<Follower, _>::attach_or_create(&mut vec_storage)?;
     if idx == vec_storage_len {
         vec_storage.push(&follower)?;
     } else {
@@ -843,7 +850,7 @@ fn delete_following_relation<S: Storage>(
     let idx: u32 = get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage_len);
 
     let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
-    let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
+    let mut vec_storage = AppendStoreMut::<Following, _>::attach_or_create(&mut vec_storage)?;
 
     if idx < vec_storage_len {
         let mut following: Following = vec_storage.get_at(idx)?;
@@ -867,7 +874,7 @@ fn delete_follower_relation<S: Storage>(
     let idx: u32 = get_bin_data(&link_storage, owner.as_slice()).unwrap_or_else(|_| vec_storage_len);
 
     let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
-    let mut vec_storage = AppendStoreMut::attach_or_create(&mut vec_storage)?;
+    let mut vec_storage = AppendStoreMut::<Follower, _>::attach_or_create(&mut vec_storage)?;
 
     if idx < vec_storage_len {
         let mut follower: Follower = vec_storage.get_at(idx)?;
@@ -1003,7 +1010,7 @@ pub fn store_unpack<S: Storage>(
     package_idx: u16,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
-    let mut store = AppendStoreMut::attach_or_create(&mut store)?;
+    let mut store = AppendStoreMut::<UnpackedFardel, _>::attach_or_create(&mut store)?;
     
     let unpacked_fardel = UnpackedFardel {
         fardel_id,
@@ -1024,8 +1031,8 @@ fn map_global_id_to_unpacked_by_unpacker<S: Storage>(
     unpacker: &CanonicalAddr,
     value: UnpackedStatus,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], store);
-    set_bin_data(&mut store, &global_id.to_be_bytes(), &value)
+    let mut storage = PrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], store);
+    set_bin_data(&mut storage, &global_id.to_be_bytes(), &value)
 }
 
 // get the unpacked status of a fardel for a given unpacker canonical address
@@ -1118,7 +1125,7 @@ pub fn store_pending_unpack<S: Storage>(
     timestamp: u64,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
-    let mut store = AppendStoreMut::attach_or_create(&mut store)?;
+    let mut store = AppendStoreMut::<PendingUnpack, _>::attach_or_create(&mut store)?;
     
     let pending_unpack = PendingUnpack {
         fardel_id,
@@ -1225,7 +1232,7 @@ pub fn cancel_pending_unpack<S: Storage>(
         let mut pending_unpack = get_pending_unpack(storage, &owner, my_pending_unpack.pending_unpack_idx)?;
         pending_unpack.canceled = true;
         let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
-        let mut store = AppendStoreMut::attach_or_create(&mut store)?;
+        let mut store = AppendStoreMut::<PendingUnpack, _>::attach_or_create(&mut store)?;
         // update element to canceled
         store.set_at(my_pending_unpack.pending_unpack_idx, &pending_unpack)?;
         map_global_id_to_pending_unpacked_by_unpacker(storage, fardel_id, unpacker, my_pending_unpack.pending_unpack_idx, false)
@@ -1363,7 +1370,7 @@ pub fn comment_on_fardel<S: Storage>(
     text: String,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
-    let mut store = AppendStoreMut::attach_or_create(&mut store)?;
+    let mut store = AppendStoreMut::<Comment, _>::attach_or_create(&mut store)?;
     let comment = Comment {
         commenter: commenter.clone(),
         text: text.as_bytes().to_vec(),
@@ -1556,7 +1563,7 @@ fn append_tx<S: Storage>(
     timestamp: u64,
 ) -> StdResult<u32> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_COMPLETED_TX, owner.as_slice()], storage);
-    let mut store = AppendStoreMut::attach_or_create(&mut store)?;
+    let mut store = AppendStoreMut::<StoredTx, _>::attach_or_create(&mut store)?;
     let tx = StoredTx {
         fardel_id,
         package_idx,
