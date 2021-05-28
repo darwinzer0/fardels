@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     to_binary, Api, Binary, Coin, Env, Extern, HandleResponse, Querier, 
-    CosmosMsg, BankMsg, HumanAddr,
+    CosmosMsg, BankMsg, HumanAddr, CanonicalAddr,
     StdError, StdResult, Storage, Uint128
 };
 use twox_hash::xxh3::hash128_with_seed;
@@ -814,6 +814,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     let mut msg: Option<String> = None;
     let mut contents_data: Option<String> = None;
     let mut cost: u128 = 0;
+    let mut canonical_owner: Option<CanonicalAddr> = None;
 
     // fardel id from hash
     let fardel_id = fardel_id.u128();
@@ -888,6 +889,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                             if f.countable {
                                 store_fardel_next_package(&mut deps.storage, global_id, next_package + 1)?;
                             }
+                            canonical_owner = Some(owner);
                         }
                     },
                     None => {
@@ -935,7 +937,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
         })?;
 
         // push payment
-        let fardel_owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
+        let fardel_owner = deps.api.human_address(&canonical_owner.unwrap())?;
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address.clone(),
             to_address: fardel_owner,
