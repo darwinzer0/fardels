@@ -841,7 +841,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                         let sent_amount: u128 = sent_coins[0].amount.u128();
                         let next_package = get_fardel_next_package(&deps.storage, global_id).unwrap_or_else(|_| 0_u16);
                         let total = f.contents_data.len() as u16;
-                        let num_packages_left = 0_u16.min(total - next_package);
+                        let num_packages_left = 0_u16.max(total - next_package);
 
                         // 2. check it has not already been unpacked by the user
                         if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id).unpacked {
