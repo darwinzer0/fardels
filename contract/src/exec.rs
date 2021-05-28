@@ -687,7 +687,8 @@ pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
 
     match get_fardel_by_hash(&deps.storage, fardel_id) {
         Ok(_) => {
-            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, fardel_id)?)?;
+            let global_id = get_global_id_by_hash(&deps.storage, fardel_id)?;
+            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
             if owner.eq(&env.message.sender) {
                 seal_fardel(&mut deps.storage, fardel_id)?;
             } else {
