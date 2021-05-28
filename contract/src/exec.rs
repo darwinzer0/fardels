@@ -851,8 +851,8 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                         } else if get_sealed_status(&deps.storage, global_id) {
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
-                        // 4. check it has not expired
-                        } else if f.seal_time < env.block.time {
+                        // 4. check it has not expired, 0 seal_time means never expires
+                        } else if f.seal_time > 0 && f.seal_time < env.block.time {
                             seal_fardel(&mut deps.storage, global_id)?;
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
