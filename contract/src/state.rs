@@ -1158,7 +1158,7 @@ pub fn get_pending_unpack<S: ReadonlyStorage>(
 }
 
 // gets a list of pending unpacked fardels for a given owner canonical address
-pub fn get_pending_unpacks_from_start<S: Storage>(
+pub fn get_pending_unpacks_from_start<S: ReadonlyStorage>(
     storage: &S, 
     owner: &CanonicalAddr,
     number: u32,

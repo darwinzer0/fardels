@@ -20,7 +20,7 @@ use crate::state::{Config, ReadonlyConfig,
     store_account_deactivated,
     PendingUnpack, cancel_pending_unpack,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
-    get_pending_unpacks_from_start,
+    get_pending_unpacks_from_start, get_pending_start, set_pending_start,
     has_rated, set_rated, get_rating, remove_rated, 
     subtract_upvote_fardel, subtract_downvote_fardel,
     add_upvote_fardel, add_downvote_fardel, 
@@ -729,6 +729,7 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
         msg = Some(String::from("invalid number of unpacks to approve"));
     } else {
         let pending_unpacks = get_pending_unpacks_from_start(&deps.storage, &owner, number as u32)?;
+        let new_idx: u32 = get_pending_start(&deps.storage, &owner) + pending_unpacks.len() as u32;
         let pending_unpacks: Vec<PendingUnpack> = pending_unpacks.into_iter().filter(|pu| !pu.canceled).collect();
 
         let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
@@ -783,6 +784,10 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
             // sum commission
             total_commission += commission_amount.low_u128();
         }
+        
+        // update the start idx for pending unpacks
+        set_pending_start(&mut deps.storage, &owner, new_idx)?;
+
         if total_commission > 0 {
             messages.push(CosmosMsg::Bank(BankMsg::Send {
                 from_address: env.contract.address.clone(),
@@ -811,7 +816,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     fardel_id: Uint128,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
-    let pending: bool = false;
+    let mut pending: bool = false;
     let mut msg: Option<String> = None;
     let mut contents_data: Option<String> = None;
     let mut cost: u128 = 0;
@@ -880,6 +885,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                                     env.message.sent_funds[0].clone(),
                                     env.block.time,
                                 )?;
+                                pending = true;
                                 msg = Some(String::from("Fardel unpack is pending approval by owner."));
                             } else {
                                 store_unpack(&mut deps.storage, &message_sender, global_id, next_package)?;
