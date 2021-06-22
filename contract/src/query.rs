@@ -289,7 +289,7 @@ pub fn query_get_transactions<S: Storage, A: Api, Q: Querier>(
     account: &HumanAddr,
     page: Option<i32>,
     page_size: Option<i32>,
-) -> StdResult<Binary> {
+) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
@@ -302,7 +302,7 @@ pub fn query_get_transactions<S: Storage, A: Api, Q: Querier>(
 pub fn query_get_handle<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account: &HumanAddr,
-) -> StdResult<Binary> {
+) -> QueryResult {
     let mut status: ResponseStatus = Success;
     let address = deps.api.canonical_address(account)?;
     
@@ -323,7 +323,7 @@ pub fn query_get_following<S: Storage, A: Api, Q: Querier>(
     account: &HumanAddr,
     page: Option<i32>,
     page_size: Option<i32>,
-) -> StdResult<Binary> {
+) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
@@ -337,7 +337,7 @@ pub fn query_is_following<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account: &HumanAddr,
     handle: String,
-) -> StdResult<Binary> {
+) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
     let followed_addr = get_account_for_handle(&deps.storage, &handle)?;
     let following = is_following(&deps.storage, &address, &followed_addr);
@@ -350,7 +350,7 @@ pub fn query_get_followers<S: Storage, A: Api, Q: Querier>(
     account: &HumanAddr,
     page: Option<i32>,
     page_size: Option<i32>,
-) -> StdResult<Binary> {
+) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
@@ -365,7 +365,7 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     account: &HumanAddr,
     page: Option<i32>,
     page_size: Option<i32>,
-) -> StdResult<Binary> {
+) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
@@ -420,7 +420,7 @@ pub fn query_get_pending_unpacks<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account: &HumanAddr,
     number: Option<i32>,
-) -> StdResult<Binary> {
+) -> QueryResult {
     let owner = deps.api.canonical_address(account)?;
     let number = number.unwrap_or_else(|| 100_i32) as u32;
 
