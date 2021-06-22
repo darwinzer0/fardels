@@ -506,7 +506,7 @@ pub enum QueryAnswer {
         status: ResponseStatus,
         handle: Option<String>,
         description: Option<String>,
-        img: Option<Binary>,
+        img: Option<String>,
     },
     IsHandleAvailable {
         response: bool,

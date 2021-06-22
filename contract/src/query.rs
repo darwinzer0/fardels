@@ -30,12 +30,12 @@ pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
     let account = get_account_for_handle(&deps.storage, &handle)?;
     let description = get_account(&deps.storage, &account)?.into_humanized(&deps.api)?.description;
     let img = get_account_img(&deps.storage, &account).unwrap_or_else(|_| vec![]);
-    let bin_img = Binary::from(img.as_slice());
+    let img_str = String::from_utf8(img).unwrap();
     let answer = QueryAnswer::GetProfile {
         status,
         handle: Some(handle),
         description: Some(description),
-        img: Some(bin_img),
+        img: Some(img_str),
     };
     to_binary(&answer)
 }
