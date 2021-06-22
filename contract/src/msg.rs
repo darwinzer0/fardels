@@ -72,7 +72,7 @@ pub enum HandleMsg {
     Register { 
         handle: String,
         description: Option<String>,
-        img: Option<Binary>,
+        img: Option<String>,
         padding: Option<String>,
     },
     SetHandle {
@@ -84,7 +84,7 @@ pub enum HandleMsg {
         padding: Option<String>,
     },
     SetProfileImg {
-        img: Binary,
+        img: String,
         padding: Option<String>,
     },
     GenerateViewingKey {
@@ -144,7 +144,7 @@ pub enum HandleMsg {
         approval_req: bool,
 
         /// img is a public thumbnail image that goes with the public_message
-        img: Option<Binary>,
+        img: Option<String>,
 
         /// seal_time sets an automatic timestamp for when the fardel will seal
         seal_time: Option<i32>,

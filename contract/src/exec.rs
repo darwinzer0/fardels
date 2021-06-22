@@ -230,7 +230,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     env: Env,
     handle: String,
     description: Option<String>,
-    img: Option<Binary>,
+    img: Option<String>,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
@@ -278,7 +278,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
 
                 // if profile img sent store this as well
                 if img.is_some() {
-                    let img: Vec<u8> = img.unwrap().0;
+                    let img: Vec<u8> = img.unwrap().as_bytes().to_vec();
                     if img.len() as u32 > constants.max_profile_img_size {
                         status = Failure;
                         msg = Some(String::from("Account registered, but profile image is too large."));
@@ -396,7 +396,7 @@ pub fn try_set_description<S: Storage, A: Api, Q: Querier>(
 pub fn try_set_profile_img<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    img: Binary,
+    img: String,
 ) -> StdResult<HandleResponse> {
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
 
@@ -404,7 +404,7 @@ pub fn try_set_profile_img<S: Storage, A: Api, Q: Querier>(
     let mut msg: Option<String> = None;
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
-    let img: Vec<u8> = img.0;
+    let img: Vec<u8> = img.as_bytes().to_vec();
     if img.len() as u32 > constants.max_profile_img_size {
         status = Failure;
         msg = Some(String::from("Profile image is too large."));
@@ -578,7 +578,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     cost: Uint128,
     countable: bool,
     approval_req: bool,
-    img: Option<Binary>,
+    img: Option<String>,
     seal_time: Option<i32>,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
@@ -599,7 +599,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     let mut img_size_ok = true;
     // if fardel img sent, check size
     if img.is_some() {
-        let img: Vec<u8> = img.unwrap().0;
+        let img: Vec<u8> = img.unwrap().as_bytes().to_vec();
         if img.len() as u32 > constants.max_fardel_img_size {
             img_size_ok = false;
         } 
