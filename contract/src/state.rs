@@ -295,7 +295,7 @@ pub fn store_fardel<S: Storage>(
     approval_req: bool,
     seal_time: u64,
     timestamp: u64,
-) -> StdResult<()> {
+) -> StdResult<u128> {
     //let mut config = Config::from_storage(store);
     let global_id: u128 = get_total_fardel_count(store);
 
@@ -326,7 +326,7 @@ pub fn store_fardel<S: Storage>(
     // update global fardel count
     set_bin_data(store, KEY_FARDEL_COUNT, &(global_id + 1))?;
 
-    Ok(())
+    Ok(global_id)
 }
 
 // returns the index of the appended fardel
@@ -519,6 +519,30 @@ pub fn get_sealed_status<S: Storage>(
 ) -> bool {
     let store = ReadonlyPrefixedStorage::new(PREFIX_SEALED, store);
     get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
+}
+
+//
+// Fardel Thumbnail Img
+//
+
+// stores a thumbnail img for fardel in prefixed storage
+pub fn store_fardel_img<S: Storage>(
+    store: &mut S,
+    fardel_id: u128,
+    img: Vec<u8>,
+) -> StdResult<()> {
+    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_THUMBNAIL_IMGS, store);
+    set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &img)
+}
+
+// gets a thumbnail img for fardel in prefixed storage
+pub fn get_fardel_img<S: Storage>(
+    store: &S,
+    fardel_id: u128,
+) -> String {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_FARDEL_THUMBNAIL_IMGS, store);
+    let img_vec = get_bin_data(&storage, &fardel_id.to_be_bytes()).unwrap_or_else(|_| vec![]);
+    String::from_utf8(img_vec).unwrap()
 }
 
 //
