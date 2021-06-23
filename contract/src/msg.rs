@@ -488,6 +488,7 @@ pub struct FardelResponse {
     pub upvotes: i32,
     pub downvotes: i32,
     pub timestamp: i32,
+    pub img: String,
     pub seal_time: Option<i32>,
     // unpacked parts
     pub contents_data: Option<String>,

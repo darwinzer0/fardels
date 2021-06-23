@@ -15,7 +15,7 @@ use crate::state::{Config, ReadonlyConfig,
     store_account, store_account_img, store_account_ban, store_account_block,
     Fardel, get_fardel_by_hash, get_fardel_owner, seal_fardel, store_fardel, 
     get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
-    get_global_id_by_hash, get_total_fardel_count,
+    get_global_id_by_hash, get_total_fardel_count, store_fardel_img, 
     store_following, remove_following,
     store_account_deactivated,
     PendingUnpack, cancel_pending_unpack,
@@ -279,7 +279,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                 // if profile img sent store this as well
                 if img.is_some() {
                     let img: Vec<u8> = img.unwrap().as_bytes().to_vec();
-                    if img.len() as u32 > constants.max_profile_img_size {
+                    if img.len() as u32 > constants.max_fardel_img_size {
                         status = Failure;
                         msg = Some(String::from("Account registered, but profile image is too large."));
                     } else {
@@ -599,8 +599,8 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     let mut img_size_ok = true;
     // if fardel img sent, check size
     if img.is_some() {
-        let img: Vec<u8> = img.unwrap().as_bytes().to_vec();
-        if img.len() as u32 > constants.max_fardel_img_size {
+        let img_vec: Vec<u8> = img.clone().unwrap().as_bytes().to_vec();
+        if img_vec.len() as u32 > constants.max_fardel_img_size {
             img_size_ok = false;
         } 
     }
@@ -619,7 +619,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     } else if !countable && contents_data.len() != 1 {
         // non-countable fardels can only have one package
         status = Failure;
-        msg = Some(String::from("Invalid fardel data"));
+        msg = Some(String::from("Invalid fardel data: non-countable fardels can only have one package"));
     } else {
         let stored_seal_time = valid_seal_time(seal_time)?;
 
@@ -656,12 +656,16 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
             timestamp: env.block.time,
         }.into_stored()?;
     
-        store_fardel(
+        let global_id = store_fardel(
             &mut deps.storage, fardel.hash_id, &message_sender, 
             fardel.public_message, fardel.tags, fardel.contents_data, 
             fardel.cost, fardel.countable, fardel.approval_req, 
             fardel.seal_time, fardel.timestamp,
         )?;
+        // if fardel img sent, then store it as well
+        if img.is_some() {
+            store_fardel_img(&mut deps.storage, global_id, img.unwrap().as_bytes().to_vec())?;
+        }
         fardel_id = Some(Uint128(fardel.hash_id));
     }
     

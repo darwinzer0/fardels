@@ -12,7 +12,7 @@ use crate::state::{
     get_account, get_account_for_handle,
     get_account_img,
     Fardel, get_fardel_by_id, get_fardel_by_hash,
-    get_fardels, get_sealed_status,
+    get_fardels, get_fardel_img, get_sealed_status,
     get_following, get_followers, is_following,
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
@@ -121,6 +121,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         seal_time = Some(fardel.seal_time as i32);
     }
     let sealed = get_sealed_status(&deps.storage, global_id);
+    let img = get_fardel_img(&deps.storage, global_id);
     let fardel_response = FardelResponse {
         id: fardel.hash_id,
         public_message: fardel.public_message,
@@ -135,6 +136,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         sealed,
         timestamp,
         contents_data,
+        img
     };
     let answer = QueryAnswer::GetFardelById {
         fardel: fardel_response,
@@ -209,7 +211,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     seal_time = Some(fardel.seal_time as i32);
                 }
                 let sealed = get_sealed_status(&deps.storage, global_id);
-
+                let img = get_fardel_img(&deps.storage, global_id);
                 FardelResponse {
                     id: fardel.hash_id,
                     public_message: fardel.public_message.clone(),
@@ -224,6 +226,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     sealed,
                     timestamp,
                     contents_data,
+                    img,
                 }
             })
             .collect();
@@ -393,7 +396,7 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
                 seal_time = Some(fardel.seal_time as i32);
             }
             let sealed = get_sealed_status(&deps.storage, unpack_id);
-
+            let img = get_fardel_img(&deps.storage, unpack_id);
             fardels.push(FardelResponse {
                 id: fardel.hash_id,
                 public_message: fardel.public_message.clone(),
@@ -408,6 +411,7 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
                 sealed,
                 timestamp,
                 contents_data,
+                img,
             });
         }
     }
@@ -483,7 +487,7 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                 seal_time = Some(fardel.seal_time as i32);
             }
             let sealed = get_sealed_status(&deps.storage, idx);
-
+            let img = get_fardel_img(&deps.storage, idx);
             fardels.push (
                 FardelResponse {
                     id: fardel.hash_id,
@@ -499,6 +503,7 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                     sealed,
                     timestamp,
                     contents_data,
+                    img,
                 }
             );
         }
