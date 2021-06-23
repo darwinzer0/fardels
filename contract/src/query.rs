@@ -1,7 +1,6 @@
 use cosmwasm_std::{
-    to_binary, Api, Binary, Extern, HumanAddr, Querier, 
-    StdError,
-    StdResult, Storage, QueryResult, Uint128
+    to_binary, Api, Extern, HumanAddr, Querier, 
+    StdError, Storage, QueryResult, Uint128
 };
 use crate::msg::{
     QueryAnswer, ResponseStatus, CommentResponse,
