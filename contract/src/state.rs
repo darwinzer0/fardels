@@ -1503,7 +1503,7 @@ fn comment_is_deleted<S: ReadonlyStorage>(
     comment_id: u32,
 ) -> bool {
     let storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_DELETED_COMMENTS, &fardel_id.to_be_bytes()], storage);
-    get_bin_data(&storage, &comment_id.to_be_bytes()).unwrap_or_else(|_| true)
+    get_bin_data(&storage, &comment_id.to_be_bytes()).unwrap_or_else(|_| false)
 }
 
 //
