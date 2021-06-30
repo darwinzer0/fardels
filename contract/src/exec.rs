@@ -562,7 +562,7 @@ pub fn try_unfollow<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::Follow { 
+        data: Some(to_binary(&HandleAnswer::Unfollow { 
             status: Success,
         })?),
     })
