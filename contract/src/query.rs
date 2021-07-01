@@ -11,7 +11,8 @@ use crate::state::{
     get_account, get_account_for_handle,
     get_account_img,
     Fardel, get_fardel_by_id, get_fardel_by_hash,
-    get_fardels, get_fardel_img, get_sealed_status,
+    get_fardels, get_fardel_img, get_fardel_owner,
+    get_sealed_status,
     get_following, get_followers, is_following,
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
@@ -376,7 +377,8 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     let mut fardels: Vec<FardelResponse> = vec![];
     for unpack_id in unpacked_ids {
         let fardel = get_fardel_by_id(&deps.storage, unpack_id)?;
-        if fardel.is_some() {
+        let fardel_owner = get_fardel_owner(&deps.storage, unpack_id)?;
+        if fardel.is_some() && fardel_owner != address {
             let fardel = fardel.unwrap();
             let upvotes: i32 = get_upvotes(&deps.storage, unpack_id) as i32;
             let downvotes: i32 = get_downvotes(&deps.storage, unpack_id) as i32;
