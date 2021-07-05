@@ -508,6 +508,7 @@ pub enum QueryAnswer {
         handle: Option<String>,
         description: Option<String>,
         img: Option<String>,
+        follower_count: i32,
     },
     IsHandleAvailable {
         response: bool,
@@ -531,16 +532,19 @@ pub enum QueryAnswer {
     },
     GetFollowing {
         following: Vec<String>,
+        total_count: i32,
     },
     IsFollowing {
         response: bool,
     },
     GetFollowers {
         followers: Vec<String>,
+        total_count: i32,
     },
 
     GetUnpacked {
         fardels: Vec<FardelResponse>,
+        total_count: i32,
     },
     GetPendingUnpacks {
         pending: Vec<PendingUnpackResponse>,

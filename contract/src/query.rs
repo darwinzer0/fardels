@@ -12,13 +12,15 @@ use crate::state::{
     get_account_img,
     Fardel, get_fardel_by_id, get_fardel_by_hash,
     get_fardels, get_fardel_img, get_fardel_owner,
+    get_number_of_fardels,
     get_sealed_status,
-    get_following, get_followers, is_following,
+    get_following, get_followers, is_following, get_number_of_following,
+    get_number_of_followers,
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
     get_comments, get_number_of_comments,
     Tx, get_txs,
-    get_unpacked_by_unpacker,
+    get_unpacked_by_unpacker, get_number_of_unpacked_by_unpacker,
     get_pending_unpacks_from_start,
 };
 
@@ -31,11 +33,13 @@ pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
     let description = get_account(&deps.storage, &account)?.into_humanized(&deps.api)?.description;
     let img = get_account_img(&deps.storage, &account).unwrap_or_else(|_| vec![]);
     let img_str = String::from_utf8(img).unwrap();
+    let follower_count = get_number_of_followers(&deps.storage, &account) as i32;
     let answer = QueryAnswer::GetProfile {
         status,
         handle: Some(handle),
         description: Some(description),
         img: Some(img_str),
+        follower_count,
     };
     to_binary(&answer)
 }
@@ -231,8 +235,10 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
             })
             .collect();
     }
+    let total_count = get_number_of_fardels(&deps.storage, &account) as i32;
     let answer = QueryAnswer::GetFardels {
         fardels: fardels_response,
+        total_count,
     };
     to_binary(&answer)
 }
@@ -332,7 +338,8 @@ pub fn query_get_following<S: Storage, A: Api, Q: Querier>(
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
     let following: Vec<String> = get_following(&deps.api, &deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
-    let response = QueryAnswer::GetFollowing { following };
+    let total_count = get_number_of_following(&deps.storage, &address) as i32;
+    let response = QueryAnswer::GetFollowing { following, total_count };
     to_binary(&response)
 }
 
@@ -359,7 +366,8 @@ pub fn query_get_followers<S: Storage, A: Api, Q: Querier>(
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
     let followers: Vec<String> = get_followers(&deps.api, &deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
-    let response = QueryAnswer::GetFollowers { followers };
+    let total_count = get_number_of_followers(&deps.storage, &address) as i32;
+    let response = QueryAnswer::GetFollowers { followers, total_count };
     to_binary(&response)
 }
 
@@ -416,7 +424,8 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
             });
         }
     }
-    let response = QueryAnswer::GetUnpacked { fardels };
+    let total_count = get_number_of_unpacked_by_unpacker(&deps.storage, &address) as i32;
+    let response = QueryAnswer::GetUnpacked { fardels, total_count };
     to_binary(&response)
 }
 

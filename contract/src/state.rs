@@ -488,6 +488,22 @@ pub fn get_fardels<S: ReadonlyStorage>(
     fardels
 }
 
+// returns total number of fardels for user
+pub fn get_number_of_fardels<S: ReadonlyStorage>(
+    storage: &S,
+    owner: &CanonicalAddr,
+) -> u32 {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FARDELS, owner.as_slice()], storage);
+
+    // Try to access the storage of fardels for the account.
+    // If it doesn't exist yet, return 0.
+    if let Some(result) = AppendStore::<StoredFardel, _>::attach(&store) {
+        return result.unwrap().len();
+    } else {
+        return 0;
+    };
+}
+
 //
 //  Sealed fardels
 //
@@ -943,6 +959,22 @@ pub fn get_following<A:Api, S: Storage>(
     Ok(result)
 }
 
+// returns number following
+pub fn get_number_of_following<S: ReadonlyStorage>(
+    storage: &S,
+    owner: &CanonicalAddr,
+) -> u32 {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, owner.as_slice(), PREFIX_VEC], storage);
+
+    // Try to access the storage of following for the account.
+    // If it doesn't exist yet, return 0.
+    if let Some(result) = AppendStore::<Following, _>::attach(&store) {
+        return result.unwrap().len();
+    } else {
+        return 0;
+    };
+}
+
 pub fn get_followers<A:Api, S: Storage>(
     api: &A,
     storage: &S,
@@ -975,6 +1007,22 @@ pub fn get_followers<A:Api, S: Storage>(
             follower_account.handle
         }).collect();
     Ok(result)
+}
+
+// returns number followers
+pub fn get_number_of_followers<S: ReadonlyStorage>(
+    storage: &S,
+    owner: &CanonicalAddr,
+) -> u32 {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, owner.as_slice(), PREFIX_VEC], storage);
+
+    // Try to access the storage of followers for the account.
+    // If it doesn't exist yet, return 0.
+    if let Some(result) = AppendStore::<Follower, _>::attach(&store) {
+        return result.unwrap().len();
+    } else {
+        return 0;
+    };
 }
 
 //
@@ -1101,6 +1149,22 @@ pub fn get_unpacked_by_unpacker<S: Storage>(
         .map(|fardel_id| fardel_id)
         .collect();
     unpacked
+}
+
+// gets number of unpacked fardels for a given unpacker canonical address
+pub fn get_number_of_unpacked_by_unpacker<S: Storage>(
+    storage: &S, 
+    unpacker: &CanonicalAddr,
+) -> u32 {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
+
+    // Try to access the storage of unpacked for the account.
+    // If it doesn't exist yet, return an empty list.
+    if let Some(result) = AppendStore::<u128, _>::attach(&store) {
+        return result.unwrap().len();
+    } else {
+        return 0_u32;
+    };
 }
 
 //
