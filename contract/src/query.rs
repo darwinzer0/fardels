@@ -424,7 +424,9 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
             });
         }
     }
-    let total_count = get_number_of_unpacked_by_unpacker(&deps.storage, &address) as i32;
+    let unpacks_count = get_number_of_unpacked_by_unpacker(&deps.storage, &address) as i32;
+    let fardels_count = get_number_of_fardels(&deps.storage, &address) as i32;
+    let total_count = unpacks_count - fardels_count; // don't include own fardels in # of unpacks
     let response = QueryAnswer::GetUnpacked { fardels, total_count };
     to_binary(&response)
 }

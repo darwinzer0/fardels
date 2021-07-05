@@ -542,7 +542,6 @@ pub enum QueryAnswer {
         followers: Vec<String>,
         total_count: i32,
     },
-
     GetUnpacked {
         fardels: Vec<FardelResponse>,
         total_count: i32,
