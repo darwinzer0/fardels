@@ -518,6 +518,7 @@ pub enum QueryAnswer {
     },
     GetFardels {
         fardels: Vec<FardelResponse>,
+        total_count: i32,
     },
     GetComments {
         comments: Vec<CommentResponse>,
