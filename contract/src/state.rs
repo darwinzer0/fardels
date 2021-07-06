@@ -58,7 +58,8 @@ pub const PREFIX_DEACTIVATED: &[u8] = b"deactived";
 pub const PREFIX_BANNED: &[u8] = b"banned";
 
 // Completed transactions
-pub const PREFIX_COMPLETED_TX: &[u8] = b"tx";
+pub const PREFIX_SALE_TX: &[u8] = b"sale-tx";
+pub const PREFIX_PURCHASE_TX: &[u8] = b"purchase-tx";
 
 //
 // CONFIG
@@ -1599,12 +1600,12 @@ pub fn subtract_from_commission_balance<S: Storage>(
 }
 
 //
-// Transaction record
+// Sale transaction record
 //
-//  b"tx" | {owner canonical address} | appendstore | Tx
+//  b"sale-tx" | {owner canonical address} | appendstore | Tx
 //
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Tx {
+pub struct SaleTx {
     pub fardel_id: Uint128,
     pub package_idx: i32,
     pub handle: String,
@@ -1614,7 +1615,7 @@ pub struct Tx {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct StoredTx {
+pub struct StoredSaleTx {
     pub fardel_id: u128,
     pub package_idx: u32,
     pub unpacker: CanonicalAddr,
@@ -1623,11 +1624,11 @@ pub struct StoredTx {
     pub timestamp: u64,
 }
 
-impl StoredTx {
-    pub fn into_humanized<S: ReadonlyStorage>(self, storage: &S) -> StdResult<Tx> {
+impl StoredSaleTx {
+    pub fn into_humanized<S: ReadonlyStorage>(self, storage: &S) -> StdResult<SaleTx> {
         let fardel = get_fardel_by_id(storage, self.fardel_id)?.unwrap();
         let unpacker = get_account(storage, &self.unpacker)?;
-        let tx = Tx {
+        let tx = SaleTx {
             fardel_id: fardel.hash_id,
             package_idx: self.package_idx as i32,
             handle: String::from_utf8(unpacker.handle).ok().unwrap_or_default(),
@@ -1640,9 +1641,9 @@ impl StoredTx {
 }
 
 // returns the index of the appended fardel
-fn append_tx<S: Storage>(
+pub fn append_sale_tx<S: Storage>(
     storage: &mut S,
-    owner: &CanonicalAddr,
+    owner: CanonicalAddr,
     unpacker: CanonicalAddr,
     fardel_id: u128,
     package_idx: u32,
@@ -1650,9 +1651,9 @@ fn append_tx<S: Storage>(
     fee: u128,
     timestamp: u64,
 ) -> StdResult<u32> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_COMPLETED_TX, owner.as_slice()], storage);
-    let mut store = AppendStoreMut::<StoredTx, _>::attach_or_create(&mut store)?;
-    let tx = StoredTx {
+    let mut store = PrefixedStorage::multilevel(&[PREFIX_SALE_TX, owner.as_slice()], storage);
+    let mut store = AppendStoreMut::<StoredSaleTx, _>::attach_or_create(&mut store)?;
+    let tx = StoredSaleTx {
         fardel_id,
         package_idx,
         unpacker,
@@ -1664,17 +1665,17 @@ fn append_tx<S: Storage>(
     Ok(store.len() - 1)
 }
 
-pub fn get_txs<S: ReadonlyStorage>(
+pub fn get_sale_txs<S: ReadonlyStorage>(
     storage: &S,
     owner: &CanonicalAddr,
     page: u32,
     page_size: u32,
-) -> StdResult<Vec<Tx>> {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMPLETED_TX, owner.as_slice()], storage);
+) -> StdResult<Vec<SaleTx>> {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_SALE_TX, owner.as_slice()], storage);
 
     // Try to access the storage of txs for the account.
     // If it doesn't exist yet, return an empty list.
-    let store = if let Some(result) = AppendStore::<StoredTx, _>::attach(&store) {
+    let store = if let Some(result) = AppendStore::<StoredSaleTx, _>::attach(&store) {
         result?
     } else {
         return Ok(vec![]);
@@ -1688,7 +1689,103 @@ pub fn get_txs<S: ReadonlyStorage>(
         .skip((page * page_size) as _)
         .take(page_size as _);
     // The `and_then` here flattens the `StdResult<StdResult<Tx>>` to an `StdResult<Tx>`
-    let txs: StdResult<Vec<Tx>> = tx_iter
+    let txs: StdResult<Vec<SaleTx>> = tx_iter
+        .map(|tx| tx.map(|tx| tx.into_humanized(storage)).and_then(|x| x))
+        .collect();
+    txs
+}
+
+//
+// Purchase transaction record
+//
+//  b"purchase-tx" | {unpacker canonical address} | appendstore | Tx
+//
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PurchaseTx {
+    pub fardel_id: Uint128,
+    pub package_idx: i32,
+    pub handle: String,
+    pub amount: Uint128,
+    pub fee: Uint128,
+    pub timestamp: i32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StoredPurchaseTx {
+    pub fardel_id: u128,
+    pub package_idx: u32,
+    pub owner: CanonicalAddr,
+    pub amount: u128,
+    pub fee: u128,
+    pub timestamp: u64,
+}
+
+impl StoredPurchaseTx {
+    pub fn into_humanized<S: ReadonlyStorage>(self, storage: &S) -> StdResult<PurchaseTx> {
+        let fardel = get_fardel_by_id(storage, self.fardel_id)?.unwrap();
+        let owner = get_account(storage, &self.owner)?;
+        let tx = PurchaseTx {
+            fardel_id: fardel.hash_id,
+            package_idx: self.package_idx as i32,
+            handle: String::from_utf8(owner.handle).ok().unwrap_or_default(),
+            amount: Uint128(self.amount),
+            fee: Uint128(self.fee),
+            timestamp: self.timestamp as i32,
+        };
+        Ok(tx)
+    }
+}
+
+// returns the index of the appended fardel
+pub fn append_purchase_tx<S: Storage>(
+    storage: &mut S,
+    owner: CanonicalAddr,
+    unpacker: CanonicalAddr,
+    fardel_id: u128,
+    package_idx: u32,
+    amount: u128,
+    fee: u128,
+    timestamp: u64,
+) -> StdResult<u32> {
+    let mut store = PrefixedStorage::multilevel(&[PREFIX_PURCHASE_TX, unpacker.as_slice()], storage);
+    let mut store = AppendStoreMut::<StoredPurchaseTx, _>::attach_or_create(&mut store)?;
+    let tx = StoredPurchaseTx {
+        fardel_id,
+        package_idx,
+        owner,
+        amount,
+        fee,
+        timestamp,
+    };
+    store.push(&tx)?;
+    Ok(store.len() - 1)
+}
+
+pub fn get_purchase_txs<S: ReadonlyStorage>(
+    storage: &S,
+    unpacker: &CanonicalAddr,
+    page: u32,
+    page_size: u32,
+) -> StdResult<Vec<PurchaseTx>> {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PURCHASE_TX, unpacker.as_slice()], storage);
+
+    // Try to access the storage of txs for the account.
+    // If it doesn't exist yet, return an empty list.
+    let store = if let Some(result) = AppendStore::<StoredPurchaseTx, _>::attach(&store) {
+        result?
+    } else {
+        return Ok(vec![]);
+    };
+
+    // Take `page_size` txs starting from the latest tx, potentially skipping `page * page_size`
+    // txs from the start.
+    let tx_iter = store
+        .iter()
+        .rev()
+        .skip((page * page_size) as _)
+        .take(page_size as _);
+    // The `and_then` here flattens the `StdResult<StdResult<Tx>>` to an `StdResult<Tx>`
+    let txs: StdResult<Vec<PurchaseTx>> = tx_iter
         .map(|tx| tx.map(|tx| tx.into_humanized(storage)).and_then(|x| x))
         .collect();
     txs

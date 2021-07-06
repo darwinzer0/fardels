@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Binary, HumanAddr, Uint128, StdResult};
 use crate::viewing_key::ViewingKey;
-use crate::state::{StoredFee, Tx};
+use crate::state::{StoredFee, SaleTx, PurchaseTx};
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
@@ -363,7 +363,13 @@ pub enum QueryMsg {
     //
 
     // Get historical transaction data
-    GetTransactions {
+    GetSaleTransactions {
+        address: HumanAddr,
+        key: String,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    },
+    GetPurchaseTransactions {
         address: HumanAddr,
         key: String,
         page: Option<i32>,
@@ -447,7 +453,8 @@ pub enum QueryMsg {
 impl QueryMsg {
     pub fn get_validation_params(&self) -> (Vec<&HumanAddr>, ViewingKey) {
         match self {
-            Self::GetTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetSaleTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetPurchaseTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetHandle { address, key } => (vec![address], ViewingKey(key.clone())),
             Self::GetFollowing { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::IsFollowing { address, key, .. } => (vec![address], ViewingKey(key.clone())),
@@ -524,8 +531,11 @@ pub enum QueryAnswer {
         comments: Vec<CommentResponse>,
     },
 
-    GetTransactions {
-        txs: Vec<Tx>,
+    GetSaleTransactions {
+        txs: Vec<SaleTx>,
+    },
+    GetPurchaseTransactions {
+        txs: Vec<PurchaseTx>,
     },
     GetHandle {
         status: ResponseStatus,

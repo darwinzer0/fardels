@@ -22,8 +22,8 @@ use crate::query::{
     query_get_following, query_get_followers, query_is_following,
     query_get_handle,
     query_get_profile, query_is_handle_available, query_get_comments,
-    query_get_transactions, query_get_unpacked,
-    query_get_pending_unpacks,
+    query_get_sale_transactions, query_get_purchase_transactions,
+    query_get_unpacked, query_get_pending_unpacks,
     query_get_fardels_batch,
 };
 use crate::state::{
@@ -230,8 +230,10 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
 
             return match msg {
                 // Base
-                QueryMsg::GetTransactions { address, page, page_size, .. } => 
-                    query_get_transactions(&deps, &address, page, page_size),
+                QueryMsg::GetSaleTransactions { address, page, page_size, .. } => 
+                    query_get_sale_transactions(&deps, &address, page, page_size),
+                QueryMsg::GetPurchaseTransactions { address, page, page_size, .. } => 
+                    query_get_purchase_transactions(&deps, &address, page, page_size),
                 QueryMsg::GetHandle { address, .. } => 
                     query_get_handle(&deps, &address),
                 QueryMsg::GetFollowing { address, page, page_size, .. } => 

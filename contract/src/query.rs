@@ -19,7 +19,7 @@ use crate::state::{
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
     get_comments, get_number_of_comments,
-    Tx, get_txs,
+    SaleTx, PurchaseTx, get_sale_txs, get_purchase_txs,
     get_unpacked_by_unpacker, get_number_of_unpacked_by_unpacker,
     get_pending_unpacks_from_start,
 };
@@ -293,7 +293,7 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
 
 // Authenticated queries
 
-pub fn query_get_transactions<S: Storage, A: Api, Q: Querier>(
+pub fn query_get_sale_transactions<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account: &HumanAddr,
     page: Option<i32>,
@@ -303,8 +303,23 @@ pub fn query_get_transactions<S: Storage, A: Api, Q: Querier>(
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
-    let txs: Vec<Tx> = get_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
-    let response = QueryAnswer::GetTransactions { txs };
+    let txs: Vec<SaleTx> = get_sale_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
+    let response = QueryAnswer::GetSaleTransactions { txs };
+    to_binary(&response)
+}
+
+pub fn query_get_purchase_transactions<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    account: &HumanAddr,
+    page: Option<i32>,
+    page_size: Option<i32>,
+) -> QueryResult {
+    let address = deps.api.canonical_address(account)?;
+    let page = page.unwrap_or_else(|| 0_i32) as u32;
+    let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
+
+    let txs: Vec<PurchaseTx> = get_purchase_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
+    let response = QueryAnswer::GetPurchaseTransactions { txs };
     to_binary(&response)
 }
 

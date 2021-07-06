@@ -21,6 +21,7 @@ use crate::state::{Config, ReadonlyConfig,
     PendingUnpack, cancel_pending_unpack,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
     get_pending_unpacks_from_start, get_pending_start, set_pending_start,
+    append_sale_tx, append_purchase_tx,
     has_rated, set_rated, get_rating, remove_rated, 
     subtract_upvote_fardel, subtract_downvote_fardel,
     add_upvote_fardel, add_downvote_fardel, 
@@ -825,6 +826,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     let mut contents_data: Option<String> = None;
     let mut cost: u128 = 0;
     let mut canonical_owner: Option<CanonicalAddr> = None;
+    let mut package_id = 0;
 
     // fardel id from hash
     let fardel_id = fardel_id.u128();
@@ -877,7 +879,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                             status = Failure;
                             msg = Some(String::from("Didn't send correct amount of coins to unpack."));
                         } else {
-
+                            package_id = next_package.clone();
                             if f.approval_req {
                                 // do a pending unpack
                                 store_pending_unpack(
@@ -948,7 +950,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
         })?;
 
         // push payment
-        let fardel_owner = deps.api.human_address(&canonical_owner.unwrap())?;
+        let fardel_owner = deps.api.human_address(&canonical_owner.clone().unwrap())?;
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address.clone(),
             to_address: fardel_owner,
@@ -970,6 +972,9 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                 }],
             }));
         }
+
+        append_sale_tx(&mut deps.storage, canonical_owner.clone().unwrap(), message_sender.clone(), fardel_id, package_id.into(), cost, commission_amount, env.block.time)?;
+        append_purchase_tx(&mut deps.storage, canonical_owner.unwrap(), message_sender, fardel_id, package_id.into(), cost, commission_amount, env.block.time)?;
     } else { // return coins to sender if there was a Failure
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address.clone(),
