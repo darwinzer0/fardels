@@ -73,6 +73,8 @@ pub enum HandleMsg {
         handle: String,
         description: Option<String>,
         img: Option<String>,
+        // optionally generate viewing key as well if entropy is sent
+        entropy: Option<String>,
         padding: Option<String>,
     },
     SetHandle {
@@ -236,6 +238,7 @@ pub enum HandleAnswer {
     // Account
     Register {
         status: ResponseStatus,
+        key: Option<ViewingKey>,
         msg: Option<String>,
     },
     SetHandle {

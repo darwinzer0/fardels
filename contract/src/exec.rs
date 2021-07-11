@@ -232,9 +232,11 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     handle: String,
     description: Option<String>,
     img: Option<String>,
+    entropy: Option<String>,
 ) -> StdResult<HandleResponse> {
     let mut status: ResponseStatus = Success;
     let mut msg: Option<String> = None;
+    let mut key: Option<ViewingKey> = None;
     let description = description.unwrap_or_else(|| String::from(""));
 
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
@@ -270,7 +272,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                     _ => { }
                 }
                 let stored_account = Account {
-                    owner: env.message.sender,
+                    owner: env.message.sender.clone(),
                     handle: handle.clone(),
                     description,
                 }.into_stored(&deps.api)?;
@@ -287,6 +289,14 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                         store_account_img(&mut deps.storage, &message_sender, img)?;
                     }
                 }
+
+                // if entropy was sent then generate and return a viewing key as well
+                if entropy.is_some() {
+                    let prng_seed = constants.prng_seed;
+                    let viewing_key = ViewingKey::new(&env, &prng_seed, (&entropy.unwrap()).as_ref());
+                    write_viewing_key(&mut deps.storage, &message_sender, &viewing_key);
+                    key = Some(viewing_key);
+                }
             }
         }        
     }
@@ -294,7 +304,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::Register { status, msg })?),
+        data: Some(to_binary(&HandleAnswer::Register { status, key, msg })?),
     })
 }
 

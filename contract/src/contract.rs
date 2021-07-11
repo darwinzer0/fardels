@@ -130,8 +130,8 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             try_draw_commission(deps, env, address, amount),
 
         // Account 
-        HandleMsg::Register { handle, description, img, .. } => // 
-            try_register(deps, env, handle, description, img),
+        HandleMsg::Register { handle, description, img, entropy, .. } => // 
+            try_register(deps, env, handle, description, img, entropy),
         HandleMsg::SetHandle { handle, .. } => //
             try_set_handle(deps, env, handle),
         HandleMsg::SetDescription { description, .. } => //
