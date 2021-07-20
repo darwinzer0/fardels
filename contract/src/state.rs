@@ -84,6 +84,8 @@ pub struct Constants {
     pub max_handle_len: u16,
     pub max_profile_img_size: u32,
     pub max_description_len: u16,
+    pub max_view_settings_len: u16,
+    pub max_private_settings_len: u16,
     
     pub prng_seed: Vec<u8>,
 }
