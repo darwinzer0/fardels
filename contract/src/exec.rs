@@ -231,6 +231,8 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     env: Env,
     handle: String,
     description: Option<String>,
+    view_settings: Option<String>,
+    private_settings: Option<String>,
     img: Option<String>,
     entropy: Option<String>,
 ) -> StdResult<HandleResponse> {
@@ -238,6 +240,8 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     let mut msg: Option<String> = None;
     let mut key: Option<ViewingKey> = None;
     let description = description.unwrap_or_else(|| String::from(""));
+    let view_settings = view_settings.unwrap_or_else(|| String::from(""));
+    let private_settings = private_settings.unwrap_or_else(|| String::from(""));
 
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
     let handle = handle.trim().to_owned();
@@ -250,6 +254,12 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
         // if description is too long, set status message and do nothing else
         status = Failure;
         msg = Some(String::from("Description is too long."));
+    } else if view_settings.as_bytes().len() > constants.max_view_settings_len.into() {
+        status = Failure;
+        msg = Some(String::from("View settings are too long."));
+    } else if private_settings.as_bytes().len() > constants.max_private_settings_len.into() {
+        status = Failure;
+        msg = Some(String::from("Private settings are too long."));
     } else {
         match get_account_for_handle(&deps.storage, &handle) {
             Ok(_) => {
@@ -275,6 +285,8 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                     owner: env.message.sender.clone(),
                     handle: handle.clone(),
                     description,
+                    view_settings,
+                    private_settings,
                 }.into_stored(&deps.api)?;
                 map_handle_to_account(&mut deps.storage, &message_sender, handle.clone())?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
@@ -332,6 +344,8 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
             Err(_) => {
                 let message_sender = deps.api.canonical_address(&env.message.sender)?;
                 let mut description = String::from("");
+                let mut view_settings = String::from("");
+                let mut private_settings = String::from("");
 
                 // check if previously registered
                 match get_account(&mut deps.storage, &message_sender) {
@@ -340,6 +354,8 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
                         let account = stored_account.into_humanized(&deps.api)?;
                         let old_handle = account.handle;
                         description = account.description;
+                        view_settings = account.view_settings;
+                        private_settings = account.private_settings;
                         if !handle.eq(&old_handle) {
                             delete_handle_map(&mut deps.storage, old_handle);
                         }
@@ -350,6 +366,8 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
                     owner: env.message.sender,
                     handle: handle.clone(),
                     description,
+                    view_settings,
+                    private_settings,
                 }.into_stored(&deps.api)?;
                 map_handle_to_account(&mut deps.storage, &message_sender, handle.clone())?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
@@ -387,6 +405,8 @@ pub fn try_set_description<S: Storage, A: Api, Q: Querier>(
                     owner: env.message.sender,
                     handle: account.handle,
                     description,
+                    view_settings: account.view_settings,
+                    private_settings: account.private_settings,
                 }.into_stored(&deps.api)?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
             },
@@ -401,6 +421,90 @@ pub fn try_set_description<S: Storage, A: Api, Q: Querier>(
         messages: vec![],
         log: vec![],
         data: Some(to_binary(&HandleAnswer::SetDescription { status, msg })?),
+    })
+}
+
+pub fn try_set_view_settings<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    view_settings: String,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+
+    let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+
+    if view_settings.as_bytes().len() > constants.max_view_settings_len.into() {
+        // if view settings are too long, set status message and do nothing else
+        status = Failure;
+        msg = Some(String::from("View settings are too long."));
+    } else {
+        let message_sender = deps.api.canonical_address(&env.message.sender)?;
+        match get_account(&mut deps.storage, &message_sender) {
+            Ok(stored_account) => {
+                let account = stored_account.into_humanized(&deps.api)?;
+                let stored_account = Account {
+                    owner: env.message.sender,
+                    handle: account.handle,
+                    description: account.description,
+                    view_settings,
+                    private_settings: account.private_settings,
+                }.into_stored(&deps.api)?;
+                store_account(&mut deps.storage, stored_account, &message_sender)?;
+            },
+            _ => {
+                status = Failure;
+                msg = Some(String::from("Account has not been registered, yet."));
+            }
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::SetViewSettings { status, msg })?),
+    })
+}
+
+pub fn try_set_private_settings<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    private_settings: String,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+
+    let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
+
+    if private_settings.as_bytes().len() > constants.max_private_settings_len.into() {
+        // if private settings are too long, set status message and do nothing else
+        status = Failure;
+        msg = Some(String::from("Private settings are too long."));
+    } else {
+        let message_sender = deps.api.canonical_address(&env.message.sender)?;
+        match get_account(&mut deps.storage, &message_sender) {
+            Ok(stored_account) => {
+                let account = stored_account.into_humanized(&deps.api)?;
+                let stored_account = Account {
+                    owner: env.message.sender,
+                    handle: account.handle,
+                    description: account.description,
+                    view_settings: account.view_settings,
+                    private_settings,
+                }.into_stored(&deps.api)?;
+                store_account(&mut deps.storage, stored_account, &message_sender)?;
+            },
+            _ => {
+                status = Failure;
+                msg = Some(String::from("Account has not been registered, yet."));
+            }
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::SetPrivateSettings { status, msg })?),
     })
 }
 

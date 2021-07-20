@@ -17,6 +17,8 @@ pub const DEFAULT_MAX_THUMBNAIL_IMG_SIZE: u32 = 65536_u32;
 pub const DEFAULT_MAX_CONTENTS_DATA_LEN: u16 = 1024_u16;
 pub const DEFAULT_MAX_HANDLE_LEN: u16 = 64_u16;
 pub const DEFAULT_MAX_DESCRIPTION_LEN: u16 = 280_u16;
+pub const DEFAULT_MAX_VIEW_SETTINGS_LEN: u16 = 4096_u16;
+pub const DEFAULT_MAX_PRIVATE_SETTINGS_LEN: u16 = 4096_u16;
 
 pub fn valid_transaction_fee(val: Option<Fee>) -> StdResult<Fee> {
     match val {
@@ -138,6 +140,34 @@ pub fn valid_max_description_len(val: Option<i32>) -> StdResult<u16> {
     }
 }
 
+// limit the max view settings length (in bytes) to values in 1..65535, default 4096 bytes
+pub fn valid_max_view_settings_len(val: Option<i32>) -> StdResult<u16> {
+    match val {
+        Some(v) => {
+            if v < 1 {
+                Err(StdError::generic_err("invalid_max_view_settings_length"))
+            } else {
+                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_view_settings_length")))
+            }
+        },
+        None => Ok(DEFAULT_MAX_VIEW_SETTINGS_LEN)
+    }
+}
+
+// limit the max private settings length (in bytes) to values in 1..65535, default 4096 bytes
+pub fn valid_max_private_settings_len(val: Option<i32>) -> StdResult<u16> {
+    match val {
+        Some(v) => {
+            if v < 1 {
+                Err(StdError::generic_err("invalid_max_private_settings_length"))
+            } else {
+                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_private_settings_length")))
+            }
+        },
+        None => Ok(DEFAULT_MAX_PRIVATE_SETTINGS_LEN)
+    }
+}
+
 // check valid seal time for a fardel
 pub fn valid_seal_time(val: Option<i32>) -> StdResult<u64> {
     match val {
@@ -146,4 +176,10 @@ pub fn valid_seal_time(val: Option<i32>) -> StdResult<u64> {
         },
         None => Ok(0_u64)
     }
+}
+
+pub fn has_whitespace(s: String) -> bool {
+    let mut string_copy = s.clone();
+    string_copy.retain(|c| !c.is_whitespace());
+    return string_copy.len() != s.len();
 }

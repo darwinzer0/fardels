@@ -571,6 +571,8 @@ pub struct Account {
     pub owner: HumanAddr,
     pub handle: String,
     pub description: String,
+    pub view_settings: String,
+    pub private_settings: String,
 }
 
 impl Account {
@@ -579,6 +581,8 @@ impl Account {
             owner: api.canonical_address(&self.owner)?,
             handle: self.handle.as_bytes().to_vec(),
             description: self.description.as_bytes().to_vec(),
+            view_settings: self.view_settings.as_bytes().to_vec(),
+            private_settings: self.private_settings.as_bytes().to_vec(),
         };
         Ok(account)
     }
@@ -589,6 +593,8 @@ pub struct StoredAccount {
     pub owner: CanonicalAddr,
     pub handle: Vec<u8>,
     pub description: Vec<u8>,
+    pub view_settings: Vec<u8>,
+    pub private_settings: Vec<u8>,
 }
 
 impl StoredAccount {
@@ -597,6 +603,8 @@ impl StoredAccount {
             owner: api.human_address(&self.owner)?,
             handle: String::from_utf8(self.handle).ok().unwrap_or_default(),
             description: String::from_utf8(self.description).ok().unwrap_or_default(),
+            view_settings: String::from_utf8(self.view_settings).ok().unwrap_or_default(),
+            private_settings: String::from_utf8(self.private_settings).ok().unwrap_or_default(),
         };
         Ok(account)
     }

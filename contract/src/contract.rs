@@ -6,7 +6,8 @@ use cosmwasm_std::{
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
     try_set_constants, try_change_admin, try_store_ban, try_draw_commission,
-    try_register, try_set_handle, try_set_description,
+    try_register, try_set_handle, try_set_description, try_set_view_settings, 
+    try_set_private_settings,
     try_set_profile_img, try_generate_viewing_key,
     try_set_viewing_key, try_store_deactivate, try_store_block,
     try_carry_fardel, try_seal_fardel,
@@ -33,6 +34,7 @@ use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
     valid_max_handle_len, valid_max_tag_len, valid_max_number_of_tags,
     valid_max_description_len, valid_max_query_page_size, valid_transaction_fee,
+    valid_max_view_settings_len, valid_max_private_settings_len,
 };
 use crate::viewing_key::{VIEWING_KEY_SIZE};
 
@@ -72,6 +74,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     // user settings
     let max_handle_len = valid_max_handle_len(msg.max_handle_len)?;
     let max_description_len = valid_max_description_len(msg.max_description_len)?;
+    let max_view_settings_len = valid_max_view_settings_len(msg.max_view_settings_len)?;
+    let max_private_settings_len = valid_max_private_settings_len(msg.max_private_settings_len)?;
     let max_profile_img_size = valid_max_thumbnail_img_size(msg.max_profile_img_size)?;
 
     let mut config = Config::from_storage(&mut deps.storage);
@@ -87,6 +91,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         max_contents_data_len,
         max_handle_len,
         max_description_len,
+        max_view_settings_len,
+        max_private_settings_len,
         max_profile_img_size,
         prng_seed: prng_seed_hashed.to_vec(),
     })?;
@@ -130,12 +136,16 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             try_draw_commission(deps, env, address, amount),
 
         // Account 
-        HandleMsg::Register { handle, description, img, entropy, .. } => // 
-            try_register(deps, env, handle, description, img, entropy),
+        HandleMsg::Register { handle, description, view_settings, private_settings, img, entropy, .. } => // 
+            try_register(deps, env, handle, description, view_settings, private_settings, img, entropy),
         HandleMsg::SetHandle { handle, .. } => //
             try_set_handle(deps, env, handle),
         HandleMsg::SetDescription { description, .. } => //
             try_set_description(deps, env, description),
+        HandleMsg::SetViewSettings { view_settings, .. } => //
+            try_set_view_settings(deps, env, view_settings),
+        HandleMsg::SetPrivateSettings { private_settings, .. } => //
+            try_set_private_settings(deps, env, private_settings),
         HandleMsg::SetProfileImg { img, .. } => //
             try_set_profile_img(deps, env, img),
         HandleMsg::GenerateViewingKey { entropy, .. } =>  //

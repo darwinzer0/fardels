@@ -26,6 +26,8 @@ pub struct InitMsg {
     pub max_handle_len: Option<i32>,
     pub max_profile_img_size: Option<i32>,
     pub max_description_len: Option<i32>,
+    pub max_view_settings_len: Option<i32>,
+    pub max_private_settings_len: Option<i32>,
 
     pub prng_seed: Binary,
 }
@@ -72,6 +74,8 @@ pub enum HandleMsg {
     Register { 
         handle: String,
         description: Option<String>,
+        view_settings: Option<String>,
+        private_settings: Option<String>,
         img: Option<String>,
         // optionally generate viewing key as well if entropy is sent
         entropy: Option<String>,
@@ -83,6 +87,14 @@ pub enum HandleMsg {
     },
     SetDescription {
         description: String,
+        padding: Option<String>,
+    },
+    SetViewSettings {
+        view_settings: String,
+        padding: Option<String>,
+    },
+    SetPrivateSettings {
+        private_settings: String,
         padding: Option<String>,
     },
     SetProfileImg {
@@ -249,6 +261,14 @@ pub enum HandleAnswer {
         status: ResponseStatus,
         msg: Option<String>,
     },
+    SetViewSettings {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    SetPrivateSettings {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
     SetProfileImg {
         status: ResponseStatus,
         msg: Option<String>,
@@ -336,7 +356,7 @@ pub enum QueryMsg {
     //
 
     // User queries
-    // Get the profile for a given handle (description, profile img)
+    // Get the public profile for a given handle (description, profile img)
     GetProfile {
         handle: String,
     },
@@ -378,7 +398,7 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
-    // Get the handle for the currently logged in user
+    // Get the handle and private settings for the currently logged in user
     GetHandle {
         address: HumanAddr,
         key: String,
@@ -517,6 +537,7 @@ pub enum QueryAnswer {
         status: ResponseStatus,
         handle: Option<String>,
         description: Option<String>,
+        view_settings: Option<String>,
         img: Option<String>,
         follower_count: i32,
     },
@@ -543,6 +564,7 @@ pub enum QueryAnswer {
     GetHandle {
         status: ResponseStatus,
         handle: Option<String>,
+        private_settings: Option<String>,
     },
     GetFollowing {
         following: Vec<String>,

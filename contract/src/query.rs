@@ -14,6 +14,7 @@ use crate::state::{
     get_fardels, get_fardel_img, get_fardel_owner,
     get_number_of_fardels,
     get_sealed_status,
+    Account,
     get_following, get_followers, is_following, get_number_of_following,
     get_number_of_followers,
     get_unpacked_status_by_fardel_id, 
@@ -29,15 +30,16 @@ pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
     handle: String,
 ) -> QueryResult {
     let status: ResponseStatus = Success;
-    let account = get_account_for_handle(&deps.storage, &handle)?;
-    let description = get_account(&deps.storage, &account)?.into_humanized(&deps.api)?.description;
-    let img = get_account_img(&deps.storage, &account).unwrap_or_else(|_| vec![]);
+    let address = get_account_for_handle(&deps.storage, &handle)?;
+    let account = get_account(&deps.storage, &address)?.into_humanized(&deps.api)?;
+    let img = get_account_img(&deps.storage, &address).unwrap_or_else(|_| vec![]);
     let img_str = String::from_utf8(img).unwrap();
-    let follower_count = get_number_of_followers(&deps.storage, &account) as i32;
+    let follower_count = get_number_of_followers(&deps.storage, &address) as i32;
     let answer = QueryAnswer::GetProfile {
         status,
         handle: Some(handle),
-        description: Some(description),
+        description: Some(account.description),
+        view_settings: Some(account.view_settings),
         img: Some(img_str),
         follower_count,
     };
@@ -329,16 +331,24 @@ pub fn query_get_handle<S: Storage, A: Api, Q: Querier>(
 ) -> QueryResult {
     let mut status: ResponseStatus = Success;
     let address = deps.api.canonical_address(account)?;
-    
-    let handle: Option<String> = match get_account(&deps.storage, &address) {
-        Ok(acc) => Some(acc.into_humanized(&deps.api)?.handle),
+    let mut handle: Option<String> = None;
+    let mut private_settings: Option<String> = None;
+
+    let account: Option<Account> = match get_account(&deps.storage, &address) {
+        Ok(acc) => Some(acc.into_humanized(&deps.api)?),
         Err(_) => {
             status = Failure;
             None
         }
     };
 
-    let answer = QueryAnswer::GetHandle { status, handle };
+    if status == Success {
+        let account = account.unwrap();
+        handle = Some(account.handle);
+        private_settings = Some(account.private_settings);
+    }
+
+    let answer = QueryAnswer::GetHandle { status, handle, private_settings };
     to_binary(&answer)
 }
 
