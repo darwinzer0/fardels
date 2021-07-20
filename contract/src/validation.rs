@@ -178,7 +178,7 @@ pub fn valid_seal_time(val: Option<i32>) -> StdResult<u64> {
     }
 }
 
-pub fn has_whitespace(s: String) -> bool {
+pub fn has_whitespace(s: &String) -> bool {
     let mut string_copy = s.clone();
     string_copy.retain(|c| !c.is_whitespace());
     return string_copy.len() != s.len();

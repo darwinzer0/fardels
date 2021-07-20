@@ -33,6 +33,7 @@ use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
     valid_max_handle_len, valid_max_tag_len, valid_max_number_of_tags,
     valid_max_description_len, valid_max_query_page_size, valid_seal_time,
+    has_whitespace,
 };
 use crate::viewing_key::{ViewingKey};
 use crate::contract::DENOM;
@@ -246,10 +247,10 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
     let handle = handle.trim().to_owned();
 
-    if handle.as_bytes().len() > constants.max_handle_len.into() {
+    if handle.as_bytes().len() > constants.max_handle_len.into() || has_whitespace(&handle) {
         // if handle is too long, set status message and do nothing else
         status = Failure;
-        msg = Some(String::from("Handle is too long."));
+        msg = Some(String::from("Handle is too long or has whitespace."));
     } else if description.as_bytes().len() > constants.max_description_len.into() {
         // if description is too long, set status message and do nothing else
         status = Failure;
@@ -331,10 +332,10 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
     let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
     let handle = handle.trim().to_owned();
 
-    if handle.as_bytes().len() > constants.max_handle_len.into() {
+    if handle.as_bytes().len() > constants.max_handle_len.into() || has_whitespace(&handle) {
         // if handle is too long, set status message and do nothing else
         status = Failure;
-        msg = Some(String::from("Handle is too long."));
+        msg = Some(String::from("Handle is too long or has whitespace."));
     } else {
         match get_account_for_handle(&deps.storage, &handle) {
             Ok(_) => {
