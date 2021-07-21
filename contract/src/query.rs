@@ -478,6 +478,7 @@ pub fn query_get_pending_unpacks<S: Storage, A: Api, Q: Querier>(
                 PendingUnpackResponse {
                     fardel_id: fardel.hash_id,
                     handle,
+                    canceled: pu.canceled,
                 }
             );
         }

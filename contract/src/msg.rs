@@ -528,6 +528,7 @@ pub struct FardelResponse {
 pub struct PendingUnpackResponse {
     pub handle: String,
     pub fardel_id: Uint128,
+    pub canceled: bool,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]

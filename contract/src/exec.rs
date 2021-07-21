@@ -18,7 +18,7 @@ use crate::state::{Config, ReadonlyConfig,
     get_global_id_by_hash, get_total_fardel_count, store_fardel_img, 
     store_following, remove_following,
     store_account_deactivated,
-    PendingUnpack, cancel_pending_unpack,
+    PendingUnpack, cancel_pending_unpack, get_pending_unpacked_status_by_fardel_id,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
     get_pending_unpacks_from_start, get_pending_start, set_pending_start,
     append_sale_tx, append_purchase_tx,
@@ -975,21 +975,25 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                         if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id).unpacked {
                             status = Failure;
                             msg = Some(String::from("You have already unpacked this fardel."));
-                        // 3. check it is not sealed
+                        // 3. check not pending
+                        } else if get_pending_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id).value {
+                            status = Failure;
+                            msg = Some(String::from("You have a currently pending unpack for this fardel."));
+                        // 4. check it is not sealed
                         } else if get_sealed_status(&deps.storage, global_id) {
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
-                        // 4. check it has not expired, 0 seal_time means never expires
+                        // 5. check it has not expired, 0 seal_time means never expires
                         } else if f.seal_time > 0 && f.seal_time < env.block.time {
                             seal_fardel(&mut deps.storage, global_id)?;
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
-                        // 5. check that countable packages have not been all unpacked
+                        // 6. check that countable packages have not been all unpacked
                         } else if f.countable && num_packages_left == 0 {
                             seal_fardel(&mut deps.storage, global_id)?;
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
-                        // 6. check cost is correct
+                        // 7. check cost is correct
                         } else if sent_amount != cost {
                             status = Failure;
                             msg = Some(String::from("Didn't send correct amount of coins to unpack."));
