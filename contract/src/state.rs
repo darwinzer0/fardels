@@ -426,7 +426,7 @@ pub fn get_fardel_by_id<S: ReadonlyStorage>(
     //let stored_fardel: StoredFardel = store.get_at(mapping.index)?;
     let stored_fardel: StoredFardel = match store.get_at(mapping.index) {
         Ok(f) => f,
-        _ => { return Err(StdError::generic_err(format!("could not get stored fardel for global id {}", fardel_id)));}, 
+        _ => { return Err(StdError::generic_err(format!("Could not get stored fardel for global id {}", fardel_id)));}, 
     };
     let fardel: Fardel = stored_fardel.into_humanized()?;
     Ok(Some(fardel))
@@ -1336,7 +1336,7 @@ pub fn cancel_pending_unpack<S: Storage>(
         store.set_at(my_pending_unpack.pending_unpack_idx, &pending_unpack)?;
         map_global_id_to_pending_unpacked_by_unpacker(storage, fardel_id, unpacker, my_pending_unpack.pending_unpack_idx, false)
     } else {
-        return Err(StdError::generic_err("cannot cancel unpack that is not pending."));
+        return Err(StdError::generic_err("Cannot cancel unpack that is not pending."));
     }
 }
 

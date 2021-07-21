@@ -13,7 +13,7 @@ use crate::msg::{
 use crate::state::{Config, ReadonlyConfig,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img, store_account_ban, store_account_block,
-    Fardel, get_fardel_by_hash, get_fardel_owner, seal_fardel, store_fardel, 
+    Fardel, get_fardel_by_hash, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
     get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
     get_global_id_by_hash, get_total_fardel_count, store_fardel_img, 
     store_following, remove_following,
@@ -1118,16 +1118,40 @@ pub fn try_cancel_pending<S: Storage, A: Api, Q: Querier>(
     env: Env,
     fardel_id: Uint128,
 ) -> StdResult<HandleResponse> {
-    let status = Success;
-    let msg: Option<String> = None;
+    let mut status = Success;
+    let mut msg: Option<String> = None;
+    let mut refund = Uint128(0);
+    let mut messages: Vec<CosmosMsg> = vec![];
 
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
     let owner = get_fardel_owner(&deps.storage, fardel_id)?;
+    match get_fardel_by_id(&deps.storage, fardel_id)? {
+        Some(fardel) => {
+            refund = fardel.cost.amount;
+        },
+        None => {
+            status = Failure;
+            msg = Some(String::from("No fardel with that id found."));
+        },
+    }
+
     let unpacker = deps.api.canonical_address(&env.message.sender)?;
     cancel_pending_unpack(&mut deps.storage, &owner, &unpacker, fardel_id)?;
 
+    if status == Success {
+        // return coins to sender
+        messages.push(CosmosMsg::Bank(BankMsg::Send {
+            from_address: env.contract.address.clone(),
+            to_address: env.message.sender,
+            amount: vec![Coin {
+                denom: DENOM.to_string(),
+                amount: refund,
+            }],
+        }));
+    }
+
     Ok(HandleResponse {
-        messages: vec![],
+        messages,
         log: vec![],
         data: Some(to_binary(&HandleAnswer::CancelPending { 
             status,
