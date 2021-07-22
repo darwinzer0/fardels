@@ -11,9 +11,10 @@ use crate::viewing_key::ViewingKey;
 use crate::msg::Fee;
 
 // Globals
-pub static PREFIX_CONFIG: &[u8] = b"config";
+pub const PREFIX_CONFIG: &[u8] = b"config";
 pub const KEY_CONSTANTS: &[u8] = b"constants";
 pub const KEY_FARDEL_COUNT: &[u8] = b"fardel-count";
+pub const KEY_FROZEN: &[u8] = b"frozen";
 pub const KEY_COMMISSION_BALANCE: &[u8] = b"commission";
 
 // Fardel
@@ -167,6 +168,22 @@ impl StoredFee {
         };
         Ok(fee)
     }
+}
+
+//
+// Frozen status
+//
+pub fn set_frozen<S: Storage>(
+    storage: &mut S,
+    value: bool,
+) -> StdResult<()> {
+    set_bin_data(storage, KEY_FROZEN, &value)
+}
+
+pub fn is_frozen<S: ReadonlyStorage>(
+    storage: &S,
+) -> bool {
+    get_bin_data(storage, KEY_FROZEN).unwrap_or_else(|_| false)
 }
 
 //
@@ -532,7 +549,7 @@ pub fn unseal_fardel<S: Storage>(
 
 // get sealed status of a given fardel
 //  true means sealed, false means not sealed
-pub fn get_sealed_status<S: Storage>(
+pub fn get_sealed_status<S: ReadonlyStorage>(
     store: &S, 
     fardel_id: u128,
 ) -> bool {
@@ -555,7 +572,7 @@ pub fn store_fardel_img<S: Storage>(
 }
 
 // gets a thumbnail img for fardel in prefixed storage
-pub fn get_fardel_img<S: Storage>(
+pub fn get_fardel_img<S: ReadonlyStorage>(
     store: &S,
     fardel_id: u128,
 ) -> String {
@@ -651,7 +668,7 @@ pub fn delete_handle_map<S: Storage>(
     store.remove(handle.as_bytes())
 }
 
-pub fn get_account_for_handle<S: Storage>(
+pub fn get_account_for_handle<S: ReadonlyStorage>(
     store: &S, 
     handle: &String
 ) -> StdResult<CanonicalAddr> {
@@ -674,7 +691,7 @@ pub fn store_account_img<S: Storage>(
 }
 
 // gets a thumbnail img for account in prefixed storage
-pub fn get_account_img<S: Storage>(
+pub fn get_account_img<S: ReadonlyStorage>(
     store: &S,
     owner: &CanonicalAddr,
 ) -> StdResult<Vec<u8>> {
@@ -709,7 +726,7 @@ pub fn store_account_deactivated<S: Storage>(
 }
 
 // returns true is account is deactivated
-pub fn is_deactivated<S: Storage>(
+pub fn is_deactivated<S: ReadonlyStorage>(
     store: &S,
     account: &CanonicalAddr,
 ) -> bool {
@@ -731,7 +748,7 @@ pub fn store_account_ban<S: Storage>(
 }
 
 // returns true is account is banned
-pub fn is_banned<S: Storage>(
+pub fn is_banned<S: ReadonlyStorage>(
     store: &S,
     account: &CanonicalAddr,
 ) -> bool {

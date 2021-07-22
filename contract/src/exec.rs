@@ -11,6 +11,7 @@ use crate::msg::{
     ResponseStatus::Success, ResponseStatus::Failure, Fee,
 };
 use crate::state::{Config, ReadonlyConfig,
+    set_frozen,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img, store_account_ban, store_account_block,
     Fardel, get_fardel_by_hash, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
@@ -126,6 +127,48 @@ pub fn try_change_admin<S: Storage, A: Api, Q: Querier>(
         messages: vec![],
         log: vec![],
         data: Some(to_binary(&HandleAnswer::ChangeAdmin { status: Success })?),
+    })
+}
+
+pub fn try_freeze_contract<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> StdResult<HandleResponse> {
+    let config = Config::from_storage(&mut deps.storage);
+    let constants = config.constants()?;
+
+    // permission check
+    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
+        return Err(StdError::unauthorized());
+    }
+
+    set_frozen(&mut deps.storage, true)?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::FreezeContract { status: Success })?),
+    })
+}
+
+pub fn try_unfreeze_contract<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> StdResult<HandleResponse> {
+    let config = Config::from_storage(&mut deps.storage);
+    let constants = config.constants()?;
+
+    // permission check
+    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
+        return Err(StdError::unauthorized());
+    }
+
+    set_frozen(&mut deps.storage, false)?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::UnfreezeContract { status: Success })?),
     })
 }
 

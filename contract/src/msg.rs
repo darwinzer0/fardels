@@ -54,6 +54,14 @@ pub enum HandleMsg {
         admin: HumanAddr,
         padding: Option<String>,
     },
+    // Disables the ability for non-admin users to execute handle functions, essentially making it read-only
+    FreezeContract { 
+        padding: Option<String>,
+    },
+    // Unfreezes the contract
+    UnfreezeContract { 
+        padding: Option<String>,
+    },
     Ban {
         handle: Option<String>,
         address: Option<HumanAddr>,
@@ -230,6 +238,12 @@ pub enum HandleAnswer {
         status: ResponseStatus,
     },
     ChangeAdmin {
+        status: ResponseStatus,
+    },
+    FreezeContract {
+        status: ResponseStatus,
+    },
+    UnfreezeContract {
         status: ResponseStatus,
     },
     DrawCommission {
@@ -487,6 +501,7 @@ impl QueryMsg {
             Self::GetUnpacked { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetPendingUnpacks { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetCommentsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            // Admin functions
             Self::GetFardelsBatch { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             _ => panic!("This query type does not require authentication"),
         }

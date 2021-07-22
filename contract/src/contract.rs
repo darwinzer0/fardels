@@ -5,7 +5,8 @@ use cosmwasm_std::{
 };
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
-    try_set_constants, try_change_admin, try_store_ban, try_draw_commission,
+    try_set_constants, try_change_admin, try_freeze_contract, try_unfreeze_contract,
+    try_store_ban, try_draw_commission,
     try_register, try_set_handle, try_set_description, try_set_view_settings, 
     try_set_private_settings,
     try_set_profile_img, try_generate_viewing_key,
@@ -28,7 +29,7 @@ use crate::query::{
     query_get_fardels_batch,
 };
 use crate::state::{
-    Config, ReadonlyConfig, Constants, read_viewing_key, is_banned,
+    Config, ReadonlyConfig, Constants, read_viewing_key, is_banned, is_frozen,
 };
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
@@ -110,7 +111,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     let constants = Config::from_storage(&mut deps.storage).constants()?;
     let sender = deps.api.canonical_address(&env.message.sender)?;
     if (sender != constants.admin) && 
-       (is_banned(&deps.storage, &sender)) {
+       (is_banned(&deps.storage, &sender) || is_frozen(&deps.storage)) {
         return Err(StdError::unauthorized());
     }
 
@@ -128,6 +129,10 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         ),
         HandleMsg::ChangeAdmin { admin, .. } => //
             try_change_admin(deps, env, admin),
+        HandleMsg::FreezeContract { .. } => //
+            try_freeze_contract(deps, env),
+        HandleMsg::UnfreezeContract { .. } => //
+            try_unfreeze_contract(deps, env),
         HandleMsg::Ban { handle, address, .. } => //
             try_store_ban(deps, env, handle, address, true),
         HandleMsg::Unban { handle, address, .. } => //
