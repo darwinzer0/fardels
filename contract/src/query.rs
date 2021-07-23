@@ -10,7 +10,7 @@ use crate::state::{
     ReadonlyConfig,
     get_account, get_account_for_handle,
     get_account_img,
-    Fardel, get_fardel_by_id, get_fardel_by_hash,
+    Fardel, get_fardel_by_global_id, get_fardel_by_hash,
     get_fardels, get_fardel_img, get_fardel_owner,
     get_number_of_fardels,
     get_sealed_status,
@@ -409,7 +409,7 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     let unpacked_ids: Vec<u128> = get_unpacked_by_unpacker(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
     let mut fardels: Vec<FardelResponse> = vec![];
     for unpack_id in unpacked_ids {
-        let fardel = get_fardel_by_id(&deps.storage, unpack_id)?;
+        let fardel = get_fardel_by_global_id(&deps.storage, unpack_id)?;
         let fardel_owner = get_fardel_owner(&deps.storage, unpack_id)?;
         if fardel.is_some() && fardel_owner != address {
             let fardel = fardel.unwrap();
@@ -469,7 +469,7 @@ pub fn query_get_pending_unpacks<S: Storage, A: Api, Q: Querier>(
     let pending_unpacks = get_pending_unpacks_from_start(&deps.storage, &owner, number)?;
     let mut pending: Vec<PendingUnpackResponse> = vec![];
     for pu in pending_unpacks {
-        let fardel = get_fardel_by_id(&deps.storage, pu.fardel_id)?;
+        let fardel = get_fardel_by_global_id(&deps.storage, pu.fardel_id)?;
         if fardel.is_some() {
             let fardel = fardel.unwrap();
             let account = get_account(&deps.storage, &pu.unpacker)?;
@@ -509,7 +509,7 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
 
     let mut fardels: Vec<FardelResponse> = vec![];
     for idx in start..(start+count) {
-        let fardel: Option<Fardel> = get_fardel_by_id(&deps.storage, idx)?;
+        let fardel: Option<Fardel> = get_fardel_by_global_id(&deps.storage, idx)?;
         if fardel.is_some() {
             let fardel = fardel.unwrap();
             let upvotes: i32 = get_upvotes(&deps.storage, idx) as i32;
@@ -517,6 +517,7 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
 
             let comments: Vec<CommentResponse> = vec![];
             let number_of_comments = get_number_of_comments(&deps.storage, idx) as i32;
+            // batch only gets public data
             let contents_data: Option<String> = None;
             let unpacked = false;
             let timestamp: i32 = fardel.timestamp as i32;

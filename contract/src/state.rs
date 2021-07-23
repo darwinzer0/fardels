@@ -421,7 +421,8 @@ pub fn get_fardel_owner<S: ReadonlyStorage>(
     Ok(mapping.owner)
 }
 
-pub fn get_fardel_by_id<S: ReadonlyStorage>(
+// gets a fardel by global id
+pub fn get_fardel_by_global_id<S: ReadonlyStorage>(
     storage: &S,
     fardel_id: u128,
 ) -> StdResult<Option<Fardel>> {
@@ -441,7 +442,6 @@ pub fn get_fardel_by_id<S: ReadonlyStorage>(
         return Ok(None);
     };
 
-    //let stored_fardel: StoredFardel = store.get_at(mapping.index)?;
     let stored_fardel: StoredFardel = match store.get_at(mapping.index) {
         Ok(f) => f,
         _ => { return Err(StdError::generic_err(format!("Could not get stored fardel for global id {}", fardel_id)));}, 
@@ -467,7 +467,7 @@ pub fn get_fardel_by_hash<S: ReadonlyStorage>(
         Ok(id) => id,
         _ => { return Err(StdError::generic_err(format!("could not get global_id for hash_id {}", hash))); }
     };
-    get_fardel_by_id(store, global_id)
+    get_fardel_by_global_id(store, global_id)
 }
 
 pub fn get_fardel_owner_by_hash<S: ReadonlyStorage>(
@@ -1687,7 +1687,7 @@ pub struct StoredSaleTx {
 
 impl StoredSaleTx {
     pub fn into_humanized<S: ReadonlyStorage>(self, storage: &S) -> StdResult<SaleTx> {
-        let fardel = get_fardel_by_id(storage, self.fardel_id)?.unwrap();
+        let fardel = get_fardel_by_global_id(storage, self.fardel_id)?.unwrap();
         let unpacker = get_account(storage, &self.unpacker)?;
         let tx = SaleTx {
             fardel_id: fardel.hash_id,
@@ -1783,7 +1783,7 @@ pub struct StoredPurchaseTx {
 
 impl StoredPurchaseTx {
     pub fn into_humanized<S: ReadonlyStorage>(self, storage: &S) -> StdResult<PurchaseTx> {
-        let fardel = get_fardel_by_id(storage, self.fardel_id)?.unwrap();
+        let fardel = get_fardel_by_global_id(storage, self.fardel_id)?.unwrap();
         let owner = get_account(storage, &self.owner)?;
         let tx = PurchaseTx {
             fardel_id: fardel.hash_id,

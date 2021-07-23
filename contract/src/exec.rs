@@ -14,7 +14,7 @@ use crate::state::{Config, ReadonlyConfig,
     set_frozen,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img, store_account_ban, store_account_block,
-    Fardel, get_fardel_by_hash, get_fardel_by_id, get_fardel_owner, seal_fardel, 
+    Fardel, get_fardel_by_hash, get_fardel_by_global_id, get_fardel_owner, seal_fardel, 
     hide_fardel, unhide_fardel, store_fardel, 
     get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
     get_global_id_by_hash, get_total_fardel_count, store_fardel_img, 
@@ -1229,7 +1229,7 @@ pub fn try_cancel_pending<S: Storage, A: Api, Q: Querier>(
 
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
     let owner = get_fardel_owner(&deps.storage, fardel_id)?;
-    match get_fardel_by_id(&deps.storage, fardel_id)? {
+    match get_fardel_by_global_id(&deps.storage, fardel_id)? {
         Some(fardel) => {
             refund = fardel.cost.amount;
         },
