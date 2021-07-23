@@ -23,6 +23,7 @@ pub const PREFIX_FARDEL_THUMBNAIL_IMGS: &[u8] = b"fardel-img";
 pub const PREFIX_ID_FARDEL_MAPPINGS: &[u8] = b"id-to-fardel";
 pub const PREFIX_HASH_ID_MAPPINGS: &[u8] = b"hash-to-id";
 pub const PREFIX_SEALED: &[u8] = b"sealed";
+pub const PREFIX_HIDDEN: &[u8] = b"hidden";
 pub const PREFIX_FARDEL_NEXT_PACKAGE: &[u8] = b"next";
 
 // Fardel unpacking
@@ -554,6 +555,39 @@ pub fn get_sealed_status<S: ReadonlyStorage>(
     fardel_id: u128,
 ) -> bool {
     let store = ReadonlyPrefixedStorage::new(PREFIX_SEALED, store);
+    get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
+}
+
+//
+//  Hidden fardels
+//
+//    b"hidden" | {global fardel id} -> true/false
+//       value == true means it is hidden, value == false OR no record in storage means not hidden
+//
+
+pub fn hide_fardel<S: Storage>(
+    store: &mut S,
+    fardel_id: u128,
+) -> StdResult <()> {
+    let mut store = PrefixedStorage::new(PREFIX_HIDDEN, store);
+    set_bin_data(&mut store, &fardel_id.to_be_bytes(), &true)
+}
+
+pub fn unhide_fardel<S: Storage>(
+    store: &mut S,
+    fardel_id: u128,
+) -> StdResult <()> {
+    let mut store = PrefixedStorage::new(PREFIX_HIDDEN, store);
+    set_bin_data(&mut store, &fardel_id.to_be_bytes(), &false)
+}
+
+// get hidden status of a given fardel
+//  true means hidden, false means not hidden
+pub fn get_hidden_status<S: ReadonlyStorage>(
+    store: &S, 
+    fardel_id: u128,
+) -> bool {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_HIDDEN, store);
     get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
 }
 

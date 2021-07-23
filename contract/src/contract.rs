@@ -5,13 +5,13 @@ use cosmwasm_std::{
 };
 use secret_toolkit::crypto::sha_256;
 use crate::exec::{
-    try_set_constants, try_change_admin, try_freeze_contract, try_unfreeze_contract,
+    try_set_constants, try_change_admin, try_store_frozen_contract,
     try_store_ban, try_draw_commission,
     try_register, try_set_handle, try_set_description, try_set_view_settings, 
     try_set_private_settings,
     try_set_profile_img, try_generate_viewing_key,
     try_set_viewing_key, try_store_deactivate, try_store_block,
-    try_carry_fardel, try_seal_fardel,
+    try_carry_fardel, try_seal_fardel, try_hide_fardel, try_unhide_fardel,
     try_follow, try_unfollow, try_rate_fardel, try_unrate_fardel,
     try_comment_on_fardel, try_delete_comment,
     try_unpack_fardel, try_approve_pending_unpacks, try_cancel_pending,
@@ -130,9 +130,9 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::ChangeAdmin { admin, .. } => //
             try_change_admin(deps, env, admin),
         HandleMsg::FreezeContract { .. } => //
-            try_freeze_contract(deps, env),
+            try_store_frozen_contract(deps, env, true),
         HandleMsg::UnfreezeContract { .. } => //
-            try_unfreeze_contract(deps, env),
+            try_store_frozen_contract(deps, env, false),
         HandleMsg::Ban { handle, address, .. } => //
             try_store_ban(deps, env, handle, address, true),
         HandleMsg::Unban { handle, address, .. } => //
@@ -181,7 +181,11 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             countable, approval_req, img, seal_time
         ),
         HandleMsg::SealFardel { fardel_id, .. } =>
-            try_seal_fardel(deps, env, fardel_id), 
+            try_seal_fardel(deps, env, fardel_id),
+        HandleMsg::HideFardel { fardel_id, .. } =>
+            try_hide_fardel(deps, env, fardel_id),
+        HandleMsg::UnhideFardel { fardel_id, .. } =>
+            try_unhide_fardel(deps, env, fardel_id),
         HandleMsg::ApprovePendingUnpacks { number, .. } =>
             try_approve_pending_unpacks(deps, env, number),
 

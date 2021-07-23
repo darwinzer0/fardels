@@ -14,7 +14,8 @@ use crate::state::{Config, ReadonlyConfig,
     set_frozen,
     Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
     store_account, store_account_img, store_account_ban, store_account_block,
-    Fardel, get_fardel_by_hash, get_fardel_by_id, get_fardel_owner, seal_fardel, store_fardel, 
+    Fardel, get_fardel_by_hash, get_fardel_by_id, get_fardel_owner, seal_fardel, 
+    hide_fardel, unhide_fardel, store_fardel, 
     get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
     get_global_id_by_hash, get_total_fardel_count, store_fardel_img, 
     store_following, remove_following,
@@ -130,9 +131,10 @@ pub fn try_change_admin<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-pub fn try_freeze_contract<S: Storage, A: Api, Q: Querier>(
+pub fn try_store_frozen_contract<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
+    frozen: bool,
 ) -> StdResult<HandleResponse> {
     let config = Config::from_storage(&mut deps.storage);
     let constants = config.constants()?;
@@ -142,34 +144,21 @@ pub fn try_freeze_contract<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::unauthorized());
     }
 
-    set_frozen(&mut deps.storage, true)?;
+    set_frozen(&mut deps.storage, frozen)?;
 
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::FreezeContract { status: Success })?),
-    })
-}
-
-pub fn try_unfreeze_contract<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-) -> StdResult<HandleResponse> {
-    let config = Config::from_storage(&mut deps.storage);
-    let constants = config.constants()?;
-
-    // permission check
-    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
-        return Err(StdError::unauthorized());
+    if frozen {
+        Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::FreezeContract { status: Success })?),
+        })
+    } else {
+        Ok(HandleResponse {
+            messages: vec![],
+            log: vec![],
+            data: Some(to_binary(&HandleAnswer::UnfreezeContract { status: Success })?),
+        })
     }
-
-    set_frozen(&mut deps.storage, false)?;
-
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::UnfreezeContract { status: Success })?),
-    })
 }
 
 pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
@@ -869,6 +858,78 @@ pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
         messages: vec![],
         log: vec![],
         data: Some(to_binary(&HandleAnswer::SealFardel {
+            status,
+            msg,
+        })?),
+    })
+}
+
+pub fn try_hide_fardel<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    fardel_id: Uint128,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+    let fardel_id = fardel_id.u128();
+
+    match get_fardel_by_hash(&deps.storage, fardel_id) {
+        Ok(_) => {
+            let global_id = get_global_id_by_hash(&deps.storage, fardel_id)?;
+            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
+            if owner.eq(&env.message.sender) {
+                hide_fardel(&mut deps.storage, fardel_id)?;
+            } else {
+                status = Failure;
+                msg = Some(String::from("You are not the owner of that fardel."))
+            }
+        },
+        _ => {
+            status = Failure;
+            msg = Some(String::from("No Fardel with given id."));
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::HideFardel {
+            status,
+            msg,
+        })?),
+    })
+}
+
+pub fn try_unhide_fardel<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    fardel_id: Uint128,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+    let fardel_id = fardel_id.u128();
+
+    match get_fardel_by_hash(&deps.storage, fardel_id) {
+        Ok(_) => {
+            let global_id = get_global_id_by_hash(&deps.storage, fardel_id)?;
+            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
+            if owner.eq(&env.message.sender) {
+                unhide_fardel(&mut deps.storage, fardel_id)?;
+            } else {
+                status = Failure;
+                msg = Some(String::from("You are not the owner of that fardel."))
+            }
+        },
+        _ => {
+            status = Failure;
+            msg = Some(String::from("No Fardel with given id."));
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::UnhideFardel {
             status,
             msg,
         })?),
