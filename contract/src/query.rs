@@ -12,8 +12,7 @@ use crate::state::{
     get_account_img,
     Fardel, get_fardel_by_global_id, get_fardel_by_hash,
     get_fardels, get_fardel_img, get_fardel_owner,
-    get_number_of_fardels,
-    get_sealed_status,
+    get_number_of_fardels, get_sealed_status, is_fardel_hidden,
     Account,
     get_following, get_followers, is_following, get_number_of_following,
     get_number_of_followers,
@@ -118,6 +117,9 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         if unpacked_status.unpacked {
             contents_data = Some(fardel.contents_data[unpacked_status.package_idx as usize].clone());
             unpacked = true;
+        } else if is_fardel_hidden(&deps.storage, global_id) {
+            // if the fardel is not unpacked and it is hidden, then return error
+            return Err(StdError::generic_err("Fardel not found."));
         }
     }
 
@@ -167,6 +169,19 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
     if fardels.len() > 0 {
         fardels_response = fardels
             .iter()
+            .filter(|fardel| {
+                let global_id = fardel.global_id.u128();
+                let mut unpacked = false;
+                if address.is_some() {
+                    let unpacker_address = address.clone().unwrap();
+                    let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
+                    let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id);
+                    if unpacked_status.unpacked {
+                        unpacked = true;
+                    }
+                }
+                !is_fardel_hidden(&deps.storage, fardel.global_id.u128()) || unpacked
+            })
             .map(|fardel| {
                 let global_id = fardel.global_id.u128();
                 let upvotes: i32 = get_upvotes(&deps.storage, global_id) as i32;
@@ -261,6 +276,19 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
         }
     };
     let global_id = fardel.global_id.u128();
+    // make sure it is not hidden
+    let mut unpacked = false;
+    if address.is_some() {
+        let unpacker_address = address.clone().unwrap();
+        let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
+        let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id);
+        if unpacked_status.unpacked {
+            unpacked = true;
+        }
+    }
+    if is_fardel_hidden(&deps.storage, fardel.global_id.u128()) && !unpacked {
+        return Err(StdError::generic_err("Fardel not found."));
+    }
 
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
@@ -509,42 +537,45 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
 
     let mut fardels: Vec<FardelResponse> = vec![];
     for idx in start..(start+count) {
-        let fardel: Option<Fardel> = get_fardel_by_global_id(&deps.storage, idx)?;
-        if fardel.is_some() {
-            let fardel = fardel.unwrap();
-            let upvotes: i32 = get_upvotes(&deps.storage, idx) as i32;
-            let downvotes: i32 = get_downvotes(&deps.storage, idx) as i32;
+        // ignore if fardel is hidden
+        if !is_fardel_hidden(&deps.storage, idx) {
+            let fardel: Option<Fardel> = get_fardel_by_global_id(&deps.storage, idx)?;
+            if fardel.is_some() {
+                let fardel = fardel.unwrap();
+                let upvotes: i32 = get_upvotes(&deps.storage, idx) as i32;
+                let downvotes: i32 = get_downvotes(&deps.storage, idx) as i32;
 
-            let comments: Vec<CommentResponse> = vec![];
-            let number_of_comments = get_number_of_comments(&deps.storage, idx) as i32;
-            // batch only gets public data
-            let contents_data: Option<String> = None;
-            let unpacked = false;
-            let timestamp: i32 = fardel.timestamp as i32;
-            let mut seal_time: Option<i32> = None;
-            if fardel.seal_time > 0 {
-                seal_time = Some(fardel.seal_time as i32);
-            }
-            let sealed = get_sealed_status(&deps.storage, idx);
-            let img = get_fardel_img(&deps.storage, idx);
-            fardels.push (
-                FardelResponse {
-                    id: fardel.hash_id,
-                    public_message: fardel.public_message.clone(),
-                    tags: fardel.tags,
-                    cost: fardel.cost.amount,
-                    unpacked,
-                    upvotes,
-                    downvotes,
-                    number_of_comments,
-                    comments,
-                    seal_time,
-                    sealed,
-                    timestamp,
-                    contents_data,
-                    img,
+                let comments: Vec<CommentResponse> = vec![];
+                let number_of_comments = get_number_of_comments(&deps.storage, idx) as i32;
+                // batch only gets public data
+                let contents_data: Option<String> = None;
+                let unpacked = false;
+                let timestamp: i32 = fardel.timestamp as i32;
+                let mut seal_time: Option<i32> = None;
+                if fardel.seal_time > 0 {
+                    seal_time = Some(fardel.seal_time as i32);
                 }
-            );
+                let sealed = get_sealed_status(&deps.storage, idx);
+                let img = get_fardel_img(&deps.storage, idx);
+                fardels.push (
+                    FardelResponse {
+                        id: fardel.hash_id,
+                        public_message: fardel.public_message.clone(),
+                        tags: fardel.tags,
+                        cost: fardel.cost.amount,
+                        unpacked,
+                        upvotes,
+                        downvotes,
+                        number_of_comments,
+                        comments,
+                        seal_time,
+                        sealed,
+                        timestamp,
+                        contents_data,
+                        img,
+                    }
+                );
+            }
         }
     }
 

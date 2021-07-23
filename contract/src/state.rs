@@ -583,7 +583,7 @@ pub fn unhide_fardel<S: Storage>(
 
 // get hidden status of a given fardel
 //  true means hidden, false means not hidden
-pub fn get_hidden_status<S: ReadonlyStorage>(
+pub fn is_fardel_hidden<S: ReadonlyStorage>(
     store: &S, 
     fardel_id: u128,
 ) -> bool {
