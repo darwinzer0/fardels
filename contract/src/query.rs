@@ -4,7 +4,7 @@ use cosmwasm_std::{
 };
 use crate::msg::{
     QueryAnswer, ResponseStatus, CommentResponse,
-    ResponseStatus::Success, ResponseStatus::Failure, FardelResponse, PendingUnpackResponse,
+    ResponseStatus::Success, ResponseStatus::Failure, FardelResponse, PendingApprovalResponse,
 };
 use crate::state::{
     ReadonlyConfig,
@@ -21,7 +21,7 @@ use crate::state::{
     get_comments, get_number_of_comments,
     SaleTx, PurchaseTx, get_sale_txs, get_purchase_txs,
     get_unpacked_by_unpacker, get_number_of_unpacked_by_unpacker,
-    get_pending_unpacks_from_start,
+    get_pending_approvals_from_start,
 };
 
 pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
@@ -484,8 +484,8 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     to_binary(&response)
 }
 
-// get pending unpacks for fardel owner
-pub fn query_get_pending_unpacks<S: Storage, A: Api, Q: Querier>(
+// get pending approvals of unpacks for the given fardel owner
+pub fn query_get_pending_approvals<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account: &HumanAddr,
     number: Option<i32>,
@@ -493,9 +493,8 @@ pub fn query_get_pending_unpacks<S: Storage, A: Api, Q: Querier>(
     let owner = deps.api.canonical_address(account)?;
     let number = number.unwrap_or_else(|| 100_i32) as u32;
 
-    //let pending_start = get_pending_start(&deps.storage, &owner);
-    let pending_unpacks = get_pending_unpacks_from_start(&deps.storage, &owner, number)?;
-    let mut pending: Vec<PendingUnpackResponse> = vec![];
+    let pending_unpacks = get_pending_approvals_from_start(&deps.storage, &owner, number)?;
+    let mut pending: Vec<PendingApprovalResponse> = vec![];
     for pu in pending_unpacks {
         let fardel = get_fardel_by_global_id(&deps.storage, pu.fardel_id)?;
         if fardel.is_some() {
@@ -503,7 +502,7 @@ pub fn query_get_pending_unpacks<S: Storage, A: Api, Q: Querier>(
             let account = get_account(&deps.storage, &pu.unpacker)?;
             let handle = account.into_humanized(&deps.api)?.handle;
             pending.push(
-                PendingUnpackResponse {
+                PendingApprovalResponse {
                     fardel_id: fardel.hash_id,
                     handle,
                     canceled: pu.canceled,
@@ -511,7 +510,7 @@ pub fn query_get_pending_unpacks<S: Storage, A: Api, Q: Querier>(
             );
         }
     }
-    let response = QueryAnswer::GetPendingUnpacks { pending };
+    let response = QueryAnswer::GetPendingApprovals { pending };
     to_binary(&response)
 }
 

@@ -29,7 +29,7 @@ pub const PREFIX_FARDEL_NEXT_PACKAGE: &[u8] = b"next";
 // Fardel unpacking
 pub const PREFIX_UNPACKED: &[u8] = b"unpacked";
 pub const PREFIX_ID_UNPACKED_MAPPINGS: &[u8] = b"id-to-unpacked";
-pub const PREFIX_PENDING_UNPACK: &[u8] = b"pending";
+pub const PREFIX_PENDING_APPROVAL: &[u8] = b"pending";
 pub const PREFIX_PENDING_START: &[u8] = b"pending-start";
 pub const PREFIX_ID_PENDING_UNPACKED_MAPPINGS: &[u8] = b"id-to-pending";
 
@@ -1274,7 +1274,7 @@ pub fn store_pending_unpack<S: Storage>(
     sent_funds: Coin,
     timestamp: u64,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
+    let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
     let mut store = AppendStoreMut::<PendingUnpack, _>::attach_or_create(&mut store)?;
     
     let pending_unpack = PendingUnpack {
@@ -1296,7 +1296,7 @@ pub fn get_pending_unpack<S: ReadonlyStorage>(
     owner: &CanonicalAddr,
     idx: u32,
 ) -> StdResult<PendingUnpack> {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
     // Try to access the storage of pending unpacks for the account.
     // If it doesn't exist yet, return an empty list.
     let store = if let Some(result) = AppendStore::<PendingUnpack, _>::attach(&store) {
@@ -1308,13 +1308,13 @@ pub fn get_pending_unpack<S: ReadonlyStorage>(
 }
 
 // gets a list of pending unpacked fardels for a given owner canonical address
-pub fn get_pending_unpacks_from_start<S: ReadonlyStorage>(
+pub fn get_pending_approvals_from_start<S: ReadonlyStorage>(
     storage: &S, 
     owner: &CanonicalAddr,
     number: u32,
 ) -> StdResult<Vec<PendingUnpack>> {
     let start = get_pending_start(storage, owner);
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
 
     // Try to access the storage of unpacked for the account.
     // If it doesn't exist yet, return an empty list.
@@ -1381,7 +1381,7 @@ pub fn cancel_pending_unpack<S: Storage>(
     if my_pending_unpack.value {
         let mut pending_unpack = get_pending_unpack(storage, &owner, my_pending_unpack.pending_unpack_idx)?;
         pending_unpack.canceled = true;
-        let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_UNPACK, owner.as_slice()], storage);
+        let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
         let mut store = AppendStoreMut::<PendingUnpack, _>::attach_or_create(&mut store)?;
         // update element to canceled
         store.set_at(my_pending_unpack.pending_unpack_idx, &pending_unpack)?;

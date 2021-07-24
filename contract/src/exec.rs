@@ -22,7 +22,7 @@ use crate::state::{Config, ReadonlyConfig,
     store_account_deactivated,
     PendingUnpack, cancel_pending_unpack, get_pending_unpacked_status_by_fardel_id,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
-    get_pending_unpacks_from_start, get_pending_start, set_pending_start,
+    get_pending_approvals_from_start, get_pending_start, set_pending_start,
     append_sale_tx, append_purchase_tx,
     has_rated, set_rated, get_rating, remove_rated, 
     subtract_upvote_fardel, subtract_downvote_fardel,
@@ -952,24 +952,24 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
         status = Failure;
         msg = Some(String::from("invalid number of unpacks to approve"));
     } else {
-        let pending_unpacks = get_pending_unpacks_from_start(&deps.storage, &owner, number as u32)?;
-        let new_idx: u32 = get_pending_start(&deps.storage, &owner) + pending_unpacks.len() as u32;
-        let pending_unpacks: Vec<PendingUnpack> = pending_unpacks.into_iter().filter(|pu| !pu.canceled).collect();
+        let pending_approvals = get_pending_approvals_from_start(&deps.storage, &owner, number as u32)?;
+        let new_idx: u32 = get_pending_start(&deps.storage, &owner) + pending_approvals.len() as u32;
+        let pending_approvals: Vec<PendingUnpack> = pending_approvals.into_iter().filter(|pu| !pu.canceled).collect();
 
         let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
         let mut total_commission: u128 = 0;
 
-        for pending_unpack in pending_unpacks {
+        for pending_approval in pending_approvals {
             // complete the unpack
             store_unpack(
                 &mut deps.storage, 
-                &pending_unpack.unpacker, 
-                pending_unpack.fardel_id, 
-                pending_unpack.package_idx,
+                &pending_approval.unpacker, 
+                pending_approval.fardel_id, 
+                pending_approval.package_idx,
             )?;
 
             // handle the transaction
-            let cost = pending_unpack.coin.amount.u128();
+            let cost = pending_approval.coin.amount.u128();
 
             // commission_amount = cost * commission_rate_nom / commission_rate_denom
             let cost_u256 = Some(U256::from(cost));

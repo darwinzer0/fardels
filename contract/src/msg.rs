@@ -172,11 +172,23 @@ pub enum HandleMsg {
         seal_time: Option<i32>,
         padding: Option<String>,
     },
-    /// seals a fardel so no one can unpack it anymore
+    /// Seals a fardel so no one can unpack it anymore
     ///   Once a fardel has been sealed it cannot be unsealed. 
     ///   If the owner of the fardel wants to make the contents 
     ///   available again, then they need to carry a new fardel.
     SealFardel {
+        fardel_id: Uint128,
+        padding: Option<String>,
+    },
+    /// Hides a fardel so that it will not be returned by GetFardels or GetFardelsById
+    ///   Also, it cannot be unpacked, but it is still available to people who have already
+    ///   unpacked it.
+    HideFardel {
+        fardel_id: Uint128,
+        padding: Option<String>,
+    },
+    /// unhides a previously hidden fardel
+    UnhideFardel {
         fardel_id: Uint128,
         padding: Option<String>,
     },
@@ -326,6 +338,14 @@ pub enum HandleAnswer {
         fardel_id: Option<Uint128>,
     },
     SealFardel {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    HideFardel {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    UnhideFardel {
         status: ResponseStatus,
         msg: Option<String>,
     },
