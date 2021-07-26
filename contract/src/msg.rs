@@ -492,7 +492,8 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
-    // Get whether the logged in user has rated (upvoted or downvoted) the given fardel
+    // Gets whether the logged in user has rated (upvoted or downvoted) the given fardel
+    // returns the rating (true: upvote, false: downvote, None: no vote)
     GetRating {
         address: HumanAddr,
         key: String,
