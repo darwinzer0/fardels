@@ -478,8 +478,8 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
-    // Get information about pending unpacks for the currently logged in user's fardels
-    GetPendingUnpacks {
+    // Get information about pending unpacks needing approval by the currently logged in user
+    GetPendingApprovals {
         address: HumanAddr,
         key: String,
         number: Option<i32>,
@@ -491,6 +491,12 @@ pub enum QueryMsg {
         fardel_id: Uint128,
         page: Option<i32>,
         page_size: Option<i32>,
+    },
+    // Get whether the logged in user has rated (upvoted or downvoted) the given fardel
+    GetRating {
+        address: HumanAddr,
+        key: String,
+        fardel_id: Uint128,
     },
 
     //
@@ -519,8 +525,9 @@ impl QueryMsg {
             Self::GetFardelByIdAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetUnpacked { address, key, .. } => (vec![address], ViewingKey(key.clone())),
-            Self::GetPendingUnpacks { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetPendingApprovals { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetCommentsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetRating { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             // Admin functions
             Self::GetFardelsBatch { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             _ => panic!("This query type does not require authentication"),
@@ -560,7 +567,7 @@ pub struct FardelResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PendingUnpackResponse {
+pub struct PendingApprovalResponse {
     pub handle: String,
     pub fardel_id: Uint128,
     pub canceled: bool,
@@ -590,6 +597,9 @@ pub enum QueryAnswer {
     GetComments {
         comments: Vec<CommentResponse>,
     },
+    GetRating {
+        rating: Option<bool>,
+    },
 
     GetSaleTransactions {
         txs: Vec<SaleTx>,
@@ -617,8 +627,8 @@ pub enum QueryAnswer {
         fardels: Vec<FardelResponse>,
         total_count: i32,
     },
-    GetPendingUnpacks {
-        pending: Vec<PendingUnpackResponse>,
+    GetPendingApprovals {
+        pending: Vec<PendingApprovalResponse>,
     },
     GetFardelsBatch {
         fardels: Vec<FardelResponse>,

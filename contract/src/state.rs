@@ -1393,7 +1393,8 @@ pub fn cancel_pending_unpack<S: Storage>(
 
 //
 // Fardel rating and comments
-//   there are no limits on number of downvotes/upvotes/comments made but each costs gas
+//   each user can only upvote or downvote a fardel once, and they must have unpacked it
+//   there are no limits on number of comments made but each costs gas
 //
 // Record of whether an address has rated a fardel with upvote or downvote
 //    b"rated" | {rater canonical addr} | {fardel_id} -> bool

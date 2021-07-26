@@ -13,6 +13,7 @@ use crate::state::{
     Fardel, get_fardel_by_global_id, get_fardel_by_hash,
     get_fardels, get_fardel_img, get_fardel_owner,
     get_number_of_fardels, get_sealed_status, is_fardel_hidden,
+    get_global_id_by_hash, get_rating,
     Account,
     get_following, get_followers, is_following, get_number_of_following,
     get_number_of_followers,
@@ -481,6 +482,23 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     let fardels_count = get_number_of_fardels(&deps.storage, &address) as i32;
     let total_count = unpacks_count - fardels_count; // don't include own fardels in # of unpacks
     let response = QueryAnswer::GetUnpacked { fardels, total_count };
+    to_binary(&response)
+}
+
+// get user's current rating for a fardel 
+pub fn query_get_rating<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    account: &HumanAddr,
+    fardel_id: Uint128,
+) -> QueryResult {
+    let mut rating: Option<bool> = None;
+    let address = deps.api.canonical_address(account)?;
+    let global_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
+    match get_rating(&deps.storage, &address, global_id) {
+        Ok(r) => { rating = Some(r) },
+        Err(_) => { },
+    };
+    let response = QueryAnswer::GetRating { rating };
     to_binary(&response)
 }
 

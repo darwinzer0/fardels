@@ -24,6 +24,7 @@ use crate::query::{
     query_get_following, query_get_followers, query_is_following,
     query_get_handle,
     query_get_profile, query_is_handle_available, query_get_comments,
+    query_get_rating,
     query_get_sale_transactions, query_get_purchase_transactions,
     query_get_unpacked, query_get_pending_approvals,
     query_get_fardels_batch,
@@ -271,6 +272,8 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
                     query_get_pending_approvals(&deps, &address, number),
                 QueryMsg::GetCommentsAuth { address, fardel_id, page, page_size, .. } =>
                     query_get_comments(&deps, &Some(address), fardel_id, page, page_size),
+                QueryMsg::GetRating { address, fardel_id, .. } =>
+                    query_get_rating(&deps, &address, fardel_id),
                 QueryMsg::GetFardelsBatch { address, start, count, .. } =>
                     query_get_fardels_batch(&deps, &address, start, count),
                 _ => panic!("This query type does not require authentication"),
