@@ -17,9 +17,8 @@ use crate::state::{
     get_number_of_fardels, get_sealed_status, is_fardel_hidden,
     get_global_id_by_hash, get_rating,
     Account,
-    get_following, get_followers, is_following, get_number_of_following,
+    get_following, get_followers, is_following, get_number_of_following, get_number_of_followers, get_follower_count,
     is_banned, is_deactivated,
-    get_number_of_followers,
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
     get_comments, get_number_of_comments,
@@ -43,7 +42,7 @@ pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
     let account = get_account(&deps.storage, &address)?.into_humanized(&deps.api)?;
     let img = get_account_img(&deps.storage, &address).unwrap_or_else(|_| vec![]);
     let img_str = String::from_utf8(img).unwrap();
-    let follower_count = get_number_of_followers(&deps.storage, &address) as i32;
+    let follower_count = get_follower_count(&deps.storage, &address) as i32;
     let answer = QueryAnswer::GetProfile {
         status,
         handle: Some(handle),

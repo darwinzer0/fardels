@@ -642,6 +642,7 @@ pub enum QueryAnswer {
     },
     GetFollowing {
         following: Vec<String>,
+        // for pagination
         total_count: i32,
     },
     IsFollowing {
@@ -649,6 +650,7 @@ pub enum QueryAnswer {
     },
     GetFollowers {
         followers: Vec<String>,
+        // for pagination
         total_count: i32,
     },
     IsPendingUnpack {

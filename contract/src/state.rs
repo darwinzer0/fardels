@@ -48,6 +48,7 @@ pub const PREFIX_FOLLOWING: &[u8] = b"following";
 pub const PREFIX_FOLLOWERS: &[u8] = b"followers";
 pub const PREFIX_LINK: &[u8] = b"link";
 pub const PREFIX_VEC: &[u8] = b"vec";
+pub const PREFIX_FOLLOWER_COUNT: &[u8] = b"follower-count";
 
 // Blocked
 pub const PREFIX_BLOCKED: &[u8] = b"blocked";
@@ -776,21 +777,21 @@ pub fn is_deactivated<S: ReadonlyStorage>(
 //
 
 pub fn store_account_ban<S: Storage>(
-    store: &mut S,
+    storage: &mut S,
     account: &CanonicalAddr,
     banned: bool,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::new(PREFIX_BANNED, store);
-    set_bin_data(&mut store, &account.as_slice(), &banned)
+    let mut storage = PrefixedStorage::new(PREFIX_BANNED, storage);
+    set_bin_data(&mut storage, &account.as_slice(), &banned)
 }
 
 // returns true is account is banned
 pub fn is_banned<S: ReadonlyStorage>(
-    store: &S,
+    storage: &S,
     account: &CanonicalAddr,
 ) -> bool {
-    let store = ReadonlyPrefixedStorage::new(PREFIX_BANNED, store);
-    get_bin_data(&store, &account.as_slice()).unwrap_or_else(|_| false)
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_BANNED, storage);
+    get_bin_data(&storage, &account.as_slice()).unwrap_or_else(|_| false)
 }
 
 //
@@ -800,6 +801,7 @@ pub fn is_banned<S: ReadonlyStorage>(
 //   b"following" | {owner canonical addr} | b"vec" | {appendstore index} -> Following (active = true means following)
 //   b"followers" | {owner canonical addr} | b"link" | {follower canonical addr} -> v_index
 //   b"followers" | {owner canonical addr} | b"vec" | {appendstore index} -> Follower (active = true means follower)
+//   b"follower-count" | {canonical addr} -> count of (active) followers of this account
 //
 // addresses are saved rather than handles, in case followed user changes handle
 //
@@ -825,6 +827,8 @@ pub fn store_following<S: Storage>(
 
     save_following_relation(storage, &owner, &followed_addr)?;
     save_follower_relation(storage, &owner, &followed_addr)?;
+    increment_follower_count(storage, &followed_addr);
+
     Ok(())
 }
 
@@ -935,6 +939,7 @@ pub fn remove_following<S: Storage>(
 
     delete_following_relation(storage, &owner, &followed_addr)?;
     delete_follower_relation(storage, &owner, &followed_addr)?;
+    decrement_follower_count(storage, &followed_addr);
 
     Ok(())
 }
@@ -1024,7 +1029,7 @@ pub fn get_following<A:Api, S: Storage>(
     Ok(result)
 }
 
-// returns number following
+// returns number following including non-active -- for pagination
 pub fn get_number_of_following<S: ReadonlyStorage>(
     storage: &S,
     owner: &CanonicalAddr,
@@ -1074,7 +1079,54 @@ pub fn get_followers<A:Api, S: Storage>(
     Ok(result)
 }
 
-// returns number followers
+pub fn set_follower_count<S: Storage>(
+    storage: &mut S,
+    account: &CanonicalAddr,
+    value: u32,
+) -> StdResult<()> {
+    let mut storage = PrefixedStorage::new(PREFIX_FOLLOWER_COUNT, storage);
+    set_bin_data(&mut storage, account.as_slice(), &value)
+}
+
+// number of active followers
+pub fn get_follower_count<S: ReadonlyStorage>(
+    storage: &S,
+    account: &CanonicalAddr,
+) -> u32 {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWER_COUNT, storage);
+    get_bin_data(&storage, account.as_slice()).unwrap_or_else(|_| 0_u32)
+}
+
+pub fn increment_follower_count<S: Storage>(
+    storage: &mut S,
+    account: &CanonicalAddr,
+) -> Option<u32> {
+    let mut storage = PrefixedStorage::new(PREFIX_FOLLOWER_COUNT, storage);
+    let follower_count = get_follower_count(&storage, &account);
+    let result = set_follower_count(&mut storage, &account, follower_count + 1);
+    match result {
+        Ok(_) => Some(follower_count + 1),
+        Err(_) => None
+    }
+}
+
+pub fn decrement_follower_count<S: Storage>(
+    storage: &mut S,
+    account: &CanonicalAddr,
+) -> Option<u32> {
+    let mut storage = PrefixedStorage::new(PREFIX_FOLLOWER_COUNT, storage);
+    let follower_count = get_follower_count(&storage, &account);
+    if follower_count < 1 {
+        return None;
+    }
+    let result = set_follower_count(&mut storage, &account, follower_count - 1);
+    match result {
+        Ok(_) => Some(follower_count - 1),
+        Err(_) => None
+    }
+}
+
+// returns number followers including non-active -- for pagination
 pub fn get_number_of_followers<S: ReadonlyStorage>(
     storage: &S,
     owner: &CanonicalAddr,
