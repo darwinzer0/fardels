@@ -20,7 +20,7 @@ use crate::state::{Config, ReadonlyConfig,
     get_global_id_by_hash, get_total_fardel_count, store_fardel_img, 
     store_following, remove_following,
     store_account_deactivated,
-    PendingUnpack, cancel_pending_unpack, get_pending_unpacked_status_by_fardel_id,
+    PendingUnpackApproval, cancel_pending_unpack, get_pending_unpacked_status_by_fardel_id,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
     get_pending_approvals_from_start, get_pending_start, set_pending_start,
     append_sale_tx, append_purchase_tx,
@@ -954,7 +954,7 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
     } else {
         let pending_approvals = get_pending_approvals_from_start(&deps.storage, &owner, number as u32)?;
         let new_idx: u32 = get_pending_start(&deps.storage, &owner) + pending_approvals.len() as u32;
-        let pending_approvals: Vec<PendingUnpack> = pending_approvals.into_iter().filter(|pu| !pu.canceled).collect();
+        let pending_approvals: Vec<PendingUnpackApproval> = pending_approvals.into_iter().filter(|pu| !pu.canceled).collect();
 
         let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
         let mut total_commission: u128 = 0;

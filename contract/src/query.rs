@@ -23,6 +23,7 @@ use crate::state::{
     SaleTx, PurchaseTx, get_sale_txs, get_purchase_txs,
     get_unpacked_by_unpacker, get_number_of_unpacked_by_unpacker,
     get_pending_approvals_from_start,
+    get_pending_unpacked_status_by_fardel_id,
 };
 
 pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
@@ -422,6 +423,17 @@ pub fn query_get_followers<S: Storage, A: Api, Q: Querier>(
     let followers: Vec<String> = get_followers(&deps.api, &deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
     let total_count = get_number_of_followers(&deps.storage, &address) as i32;
     let response = QueryAnswer::GetFollowers { followers, total_count };
+    to_binary(&response)
+}
+
+pub fn query_is_pending_unpack<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    account: &HumanAddr,
+    fardel_id: Uint128,
+) -> QueryResult {
+    let address = deps.api.canonical_address(account)?;
+    let pending_unpack = get_pending_unpacked_status_by_fardel_id(&deps.storage, &address, fardel_id.u128());
+    let response = QueryAnswer::IsPendingUnpack { response: pending_unpack.value };
     to_binary(&response)
 }
 

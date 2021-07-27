@@ -29,8 +29,11 @@ pub const PREFIX_FARDEL_NEXT_PACKAGE: &[u8] = b"next";
 // Fardel unpacking
 pub const PREFIX_UNPACKED: &[u8] = b"unpacked";
 pub const PREFIX_ID_UNPACKED_MAPPINGS: &[u8] = b"id-to-unpacked";
+// pending unpacks indexed by owner of the fardel
 pub const PREFIX_PENDING_APPROVAL: &[u8] = b"pending";
 pub const PREFIX_PENDING_START: &[u8] = b"pending-start";
+// pending unpacks indexed by the unpacker of the fardel
+pub const PREFIX_PENDING_UNPACKS: &[u8] = b"pending-unpacks";
 pub const PREFIX_ID_PENDING_UNPACKED_MAPPINGS: &[u8] = b"id-to-pending";
 
 // Fardel rating/comments
@@ -1230,16 +1233,18 @@ pub fn get_number_of_unpacked_by_unpacker<S: Storage>(
 }
 
 //
-// Pending unpacked fardels
+// Pending unpack approvals
 //
 // are stored in appendstore for each owner
 //   b"pending" | {owner canonical addr} | {appendstore idx}
 // with
 //   b"pending-start" | {owner canonical addr} | index
+// and
+//   b"pending-unpacks" | {unpacker canonical addr} | {appendstore idx}
 //
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PendingUnpack {
+pub struct PendingUnpackApproval {
     pub fardel_id: u128,
     pub package_idx: u16,
     pub unpacker: CanonicalAddr,
@@ -1275,9 +1280,9 @@ pub fn store_pending_unpack<S: Storage>(
     timestamp: u64,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
-    let mut store = AppendStoreMut::<PendingUnpack, _>::attach_or_create(&mut store)?;
+    let mut store = AppendStoreMut::<PendingUnpackApproval, _>::attach_or_create(&mut store)?;
     
-    let pending_unpack = PendingUnpack {
+    let pending_unpack = PendingUnpackApproval {
         fardel_id,
         package_idx,
         unpacker: unpacker.clone(),
@@ -1290,16 +1295,16 @@ pub fn store_pending_unpack<S: Storage>(
     map_global_id_to_pending_unpacked_by_unpacker(storage, fardel_id, unpacker, pending_unpack_idx, true)
 }
 
-// gets an individual pending unpacked fardel for a given owner canonical address
-pub fn get_pending_unpack<S: ReadonlyStorage>(
+// gets an individual pending unpack approval for a given owner canonical address
+pub fn get_pending_unpack_approval<S: ReadonlyStorage>(
     storage: &S,
     owner: &CanonicalAddr,
     idx: u32,
-) -> StdResult<PendingUnpack> {
+) -> StdResult<PendingUnpackApproval> {
     let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
     // Try to access the storage of pending unpacks for the account.
     // If it doesn't exist yet, return an empty list.
-    let store = if let Some(result) = AppendStore::<PendingUnpack, _>::attach(&store) {
+    let store = if let Some(result) = AppendStore::<PendingUnpackApproval, _>::attach(&store) {
         result?
     } else {
         return Err(StdError::generic_err("no pending unpacks for this owner"));
@@ -1307,18 +1312,18 @@ pub fn get_pending_unpack<S: ReadonlyStorage>(
     store.get_at(idx)
 }
 
-// gets a list of pending unpacked fardels for a given owner canonical address
+// gets a list of pending unpack approvals for a given owner canonical address
 pub fn get_pending_approvals_from_start<S: ReadonlyStorage>(
     storage: &S, 
     owner: &CanonicalAddr,
     number: u32,
-) -> StdResult<Vec<PendingUnpack>> {
+) -> StdResult<Vec<PendingUnpackApproval>> {
     let start = get_pending_start(storage, owner);
     let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
 
     // Try to access the storage of unpacked for the account.
     // If it doesn't exist yet, return an empty list.
-    let store = if let Some(result) = AppendStore::<PendingUnpack, _>::attach(&store) {
+    let store = if let Some(result) = AppendStore::<PendingUnpackApproval, _>::attach(&store) {
         result?
     } else {
         return Ok(vec![]);
@@ -1330,7 +1335,7 @@ pub fn get_pending_approvals_from_start<S: ReadonlyStorage>(
         .iter()
         .skip(start as _)
         .take(number as _);
-    let unpacked: StdResult<Vec<PendingUnpack>> = unpacked_iter
+    let unpacked: StdResult<Vec<PendingUnpackApproval>> = unpacked_iter
         .map(|pending_unpack| pending_unpack)
         .collect();
     unpacked
@@ -1379,12 +1384,12 @@ pub fn cancel_pending_unpack<S: Storage>(
 ) -> StdResult<()> {
     let my_pending_unpack = get_pending_unpacked_status_by_fardel_id(storage, &unpacker, fardel_id);
     if my_pending_unpack.value {
-        let mut pending_unpack = get_pending_unpack(storage, &owner, my_pending_unpack.pending_unpack_idx)?;
-        pending_unpack.canceled = true;
+        let mut pending_unpack_approval = get_pending_unpack_approval(storage, &owner, my_pending_unpack.pending_unpack_idx)?;
+        pending_unpack_approval.canceled = true;
         let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
-        let mut store = AppendStoreMut::<PendingUnpack, _>::attach_or_create(&mut store)?;
+        let mut store = AppendStoreMut::<PendingUnpackApproval, _>::attach_or_create(&mut store)?;
         // update element to canceled
-        store.set_at(my_pending_unpack.pending_unpack_idx, &pending_unpack)?;
+        store.set_at(my_pending_unpack.pending_unpack_idx, &pending_unpack_approval)?;
         map_global_id_to_pending_unpacked_by_unpacker(storage, fardel_id, unpacker, my_pending_unpack.pending_unpack_idx, false)
     } else {
         return Err(StdError::generic_err("Cannot cancel unpack that is not pending."));

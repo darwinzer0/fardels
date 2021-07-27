@@ -26,6 +26,7 @@ use crate::query::{
     query_get_profile, query_is_handle_available, query_get_comments,
     query_get_rating,
     query_get_sale_transactions, query_get_purchase_transactions,
+    query_is_pending_unpack,
     query_get_unpacked, query_get_pending_approvals,
     query_get_fardels_batch,
 };
@@ -266,6 +267,8 @@ fn authenticated_queries<S: Storage, A: Api, Q: Querier>(
                     query_get_fardel_by_id(&deps, &Some(address), fardel_id),
                 QueryMsg::GetFardelsAuth { address, handle, page, page_size, .. } =>
                     query_get_fardels(&deps, &Some(address), handle, page, page_size),
+                QueryMsg::IsPendingUnpack { address, fardel_id, .. } =>
+                    query_is_pending_unpack(&deps, &address, fardel_id),
                 QueryMsg::GetUnpacked { address, page, page_size, .. } =>
                     query_get_unpacked(&deps, &address, page, page_size),
                 QueryMsg::GetPendingApprovals { address, number, .. } =>

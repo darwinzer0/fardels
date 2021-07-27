@@ -471,6 +471,12 @@ pub enum QueryMsg {
         page: Option<i32>,
         page_size: Option<i32>,
     },
+    // Returns bool saying whether the given fardel is a pending unpack for the logged in user
+    IsPendingUnpack{
+        address: HumanAddr,
+        key: String,
+        fardel_id: Uint128,
+    },
     // Get paginated list of fardels that logged in user has unpacked
     GetUnpacked {
         address: HumanAddr,
@@ -525,6 +531,7 @@ impl QueryMsg {
             Self::GetFollowers { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelByIdAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFardelsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::IsPendingUnpack { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetUnpacked { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetPendingApprovals { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetCommentsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
@@ -623,6 +630,9 @@ pub enum QueryAnswer {
     GetFollowers {
         followers: Vec<String>,
         total_count: i32,
+    },
+    IsPendingUnpack {
+        response: bool,
     },
     GetUnpacked {
         fardels: Vec<FardelResponse>,
