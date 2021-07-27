@@ -4,7 +4,9 @@ use cosmwasm_std::{
 };
 use crate::msg::{
     QueryAnswer, ResponseStatus, CommentResponse,
-    ResponseStatus::Success, ResponseStatus::Failure, FardelResponse, PendingApprovalResponse,
+    ResponseStatus::Success, ResponseStatus::Failure, 
+    FardelResponse, FardelBatchResponse,
+    PendingApprovalResponse,
 };
 use crate::state::{
     ReadonlyConfig,
@@ -16,6 +18,7 @@ use crate::state::{
     get_global_id_by_hash, get_rating,
     Account,
     get_following, get_followers, is_following, get_number_of_following,
+    is_banned, is_deactivated,
     get_number_of_followers,
     get_unpacked_status_by_fardel_id, 
     get_upvotes, get_downvotes, 
@@ -32,6 +35,11 @@ pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
 ) -> QueryResult {
     let status: ResponseStatus = Success;
     let address = get_account_for_handle(&deps.storage, &handle)?;
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
     let account = get_account(&deps.storage, &address)?.into_humanized(&deps.api)?;
     let img = get_account_img(&deps.storage, &address).unwrap_or_else(|_| vec![]);
     let img_str = String::from_utf8(img).unwrap();
@@ -65,6 +73,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     fardel_id: Uint128,
 ) -> QueryResult {
     let fardel_id = fardel_id.u128();
+
     let fardel = get_fardel_by_hash(&deps.storage, fardel_id)?;
     //let fardel = match get_fardel_by_hash(&deps.storage, fardel_id) {
     //    Ok(fardel) => { fardel },
@@ -78,6 +87,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
             return Err(StdError::generic_err("Fardel not found.",));
         }
     };
+    
     let global_id = fardel.global_id.u128();
 
     let upvotes: i32 = get_upvotes(&deps.storage, global_id) as i32;
@@ -112,6 +122,11 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     let mut contents_data: Option<String> = None;
     let mut unpacked = false;
 
+    let owner = get_fardel_owner(&deps.storage, global_id)?;
+    let banned = is_banned(&deps.storage, &owner);
+    let deactivated = is_deactivated(&deps.storage, &owner);
+    let hidden = is_fardel_hidden(&deps.storage, global_id);
+
     if address.is_some() {
         let unpacker_address = address.clone().unwrap();
         let unpacker = &deps.api.canonical_address(&unpacker_address)?;
@@ -119,10 +134,11 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         if unpacked_status.unpacked {
             contents_data = Some(fardel.contents_data[unpacked_status.package_idx as usize].clone());
             unpacked = true;
-        } else if is_fardel_hidden(&deps.storage, global_id) {
-            // if the fardel is not unpacked and it is hidden, then return error
+        } else if banned || deactivated || hidden {
             return Err(StdError::generic_err("Fardel not found."));
-        }
+        } 
+    } else if banned || deactivated || hidden {
+        return Err(StdError::generic_err("Fardel not found."));
     }
 
     let timestamp: i32 = fardel.timestamp as i32;
@@ -174,6 +190,10 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
             .filter(|fardel| {
                 let global_id = fardel.global_id.u128();
                 let mut unpacked = false;
+                let owner = get_fardel_owner(&deps.storage, global_id).unwrap();
+                let banned = is_banned(&deps.storage, &owner);
+                let deactivated = is_deactivated(&deps.storage, &owner);
+                let hidden = is_fardel_hidden(&deps.storage, global_id);
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
                     let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
@@ -182,7 +202,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                         unpacked = true;
                     }
                 }
-                !is_fardel_hidden(&deps.storage, fardel.global_id.u128()) || unpacked
+                !(banned || deactivated || hidden) || unpacked
             })
             .map(|fardel| {
                 let global_id = fardel.global_id.u128();
@@ -280,6 +300,10 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
     let global_id = fardel.global_id.u128();
     // make sure it is not hidden
     let mut unpacked = false;
+    let owner = get_fardel_owner(&deps.storage, global_id)?;
+    let banned = is_banned(&deps.storage, &owner);
+    let deactivated = is_deactivated(&deps.storage, &owner);
+    let hidden = is_fardel_hidden(&deps.storage, global_id);
     if address.is_some() {
         let unpacker_address = address.clone().unwrap();
         let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
@@ -288,7 +312,7 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
             unpacked = true;
         }
     }
-    if is_fardel_hidden(&deps.storage, fardel.global_id.u128()) && !unpacked {
+    if (banned || deactivated || hidden) && !unpacked {
         return Err(StdError::generic_err("Fardel not found."));
     }
 
@@ -332,6 +356,13 @@ pub fn query_get_sale_transactions<S: Storage, A: Api, Q: Querier>(
     page_size: Option<i32>,
 ) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
@@ -347,6 +378,13 @@ pub fn query_get_purchase_transactions<S: Storage, A: Api, Q: Querier>(
     page_size: Option<i32>,
 ) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
@@ -361,6 +399,13 @@ pub fn query_get_handle<S: Storage, A: Api, Q: Querier>(
 ) -> QueryResult {
     let mut status: ResponseStatus = Success;
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let mut handle: Option<String> = None;
     let mut private_settings: Option<String> = None;
 
@@ -389,6 +434,13 @@ pub fn query_get_following<S: Storage, A: Api, Q: Querier>(
     page_size: Option<i32>,
 ) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
@@ -404,6 +456,13 @@ pub fn query_is_following<S: Storage, A: Api, Q: Querier>(
     handle: String,
 ) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let followed_addr = get_account_for_handle(&deps.storage, &handle)?;
     let following = is_following(&deps.storage, &address, &followed_addr);
     let response = QueryAnswer::IsFollowing { response: following };
@@ -417,6 +476,13 @@ pub fn query_get_followers<S: Storage, A: Api, Q: Querier>(
     page_size: Option<i32>,
 ) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
@@ -432,6 +498,13 @@ pub fn query_is_pending_unpack<S: Storage, A: Api, Q: Querier>(
     fardel_id: Uint128,
 ) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let pending_unpack = get_pending_unpacked_status_by_fardel_id(&deps.storage, &address, fardel_id.u128());
     let response = QueryAnswer::IsPendingUnpack { response: pending_unpack.value };
     to_binary(&response)
@@ -444,6 +517,13 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     page_size: Option<i32>,
 ) -> QueryResult {
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
@@ -505,6 +585,13 @@ pub fn query_get_rating<S: Storage, A: Api, Q: Querier>(
 ) -> QueryResult {
     let mut rating: Option<bool> = None;
     let address = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &address) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let global_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
     match get_rating(&deps.storage, &address, global_id) {
         Ok(r) => { rating = Some(r) },
@@ -521,6 +608,13 @@ pub fn query_get_pending_approvals<S: Storage, A: Api, Q: Querier>(
     number: Option<i32>,
 ) -> QueryResult {
     let owner = deps.api.canonical_address(account)?;
+
+    if is_banned(&deps.storage, &owner) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &owner) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    }
+
     let number = number.unwrap_or_else(|| 100_i32) as u32;
 
     let pending_unpacks = get_pending_approvals_from_start(&deps.storage, &owner, number)?;
@@ -544,8 +638,6 @@ pub fn query_get_pending_approvals<S: Storage, A: Api, Q: Querier>(
     to_binary(&response)
 }
 
-// get pending unpacks for fardels sender is unpacking
-
 // get fardels batch by global id -- public data only -- for admin only!
 pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
@@ -564,20 +656,21 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
     let start = start.unwrap_or_else(|| Uint128(0)).u128();
     let count = count.unwrap_or_else(|| Uint128(10)).u128();
 
-    let mut fardels: Vec<FardelResponse> = vec![];
+    let mut fardels: Vec<FardelBatchResponse> = vec![];
     for idx in start..(start+count) {
-        // ignore if fardel is hidden
-        if !is_fardel_hidden(&deps.storage, idx) {
+        let owner = get_fardel_owner(&deps.storage, idx)?;
+        let banned = is_banned(&deps.storage, &owner);
+        let deactivated = is_deactivated(&deps.storage, &owner);
+        let hidden = is_fardel_hidden(&deps.storage, idx);
+        // ignore if fardel is hidden or user is banned or deactivated
+        if !(banned || deactivated || hidden) {
             let fardel: Option<Fardel> = get_fardel_by_global_id(&deps.storage, idx)?;
             if fardel.is_some() {
                 let fardel = fardel.unwrap();
                 let upvotes: i32 = get_upvotes(&deps.storage, idx) as i32;
                 let downvotes: i32 = get_downvotes(&deps.storage, idx) as i32;
 
-                let comments: Vec<CommentResponse> = vec![];
                 let number_of_comments = get_number_of_comments(&deps.storage, idx) as i32;
-                // batch only gets public data
-                let contents_data: Option<String> = None;
                 let unpacked = false;
                 let timestamp: i32 = fardel.timestamp as i32;
                 let mut seal_time: Option<i32> = None;
@@ -586,9 +679,12 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                 }
                 let sealed = get_sealed_status(&deps.storage, idx);
                 let img = get_fardel_img(&deps.storage, idx);
+                let account = get_account(&deps.storage, &owner)?.into_humanized(&deps.api)?;
+                // fardel batch only gets public data
                 fardels.push (
-                    FardelResponse {
-                        id: fardel.hash_id,
+                    FardelBatchResponse {
+                        global_id: Uint128(idx),
+                        hash_id: fardel.hash_id,
                         public_message: fardel.public_message.clone(),
                         tags: fardel.tags,
                         cost: fardel.cost.amount,
@@ -596,12 +692,12 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                         upvotes,
                         downvotes,
                         number_of_comments,
-                        comments,
                         seal_time,
                         sealed,
                         timestamp,
-                        contents_data,
                         img,
+                        owner: deps.api.human_address(&owner)?,
+                        handle: account.handle,
                     }
                 );
             }

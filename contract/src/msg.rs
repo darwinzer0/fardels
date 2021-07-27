@@ -574,6 +574,26 @@ pub struct FardelResponse {
     pub contents_data: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct FardelBatchResponse {
+    pub global_id: Uint128,
+    pub hash_id: Uint128,
+    pub owner: HumanAddr,
+    pub handle: String,
+    pub public_message: String,
+    pub cost: Uint128,
+    pub unpacked: bool,
+    pub sealed: bool,
+    pub tags: Vec<String>,
+    // total number of comments
+    pub number_of_comments: i32,
+    pub upvotes: i32,
+    pub downvotes: i32,
+    pub timestamp: i32,
+    pub img: String,
+    pub seal_time: Option<i32>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PendingApprovalResponse {
     pub handle: String,
@@ -642,7 +662,7 @@ pub enum QueryAnswer {
         pending: Vec<PendingApprovalResponse>,
     },
     GetFardelsBatch {
-        fardels: Vec<FardelResponse>,
+        fardels: Vec<FardelBatchResponse>,
     },
 
     // Authentication error
