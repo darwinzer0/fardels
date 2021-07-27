@@ -29,7 +29,7 @@ use crate::state::{Config, ReadonlyConfig,
     add_upvote_fardel, add_downvote_fardel, 
     comment_on_fardel, delete_comment, get_comment_by_id,
     write_viewing_key, get_commission_balance,
-    is_blocked_by,
+    is_blocked_by, is_banned, is_deactivated,
 };
 use crate::validation::{
     valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
@@ -687,7 +687,16 @@ pub fn try_follow<S: Storage, A: Api, Q: Querier>(
     handle: String,
 ) -> StdResult<HandleResponse> {
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    // TODO: check if blocked
+
+    let account_to_follow = get_account_for_handle(&deps.storage, &handle)?;
+    if is_banned(&deps.storage, &account_to_follow) {
+        return Err(StdError::generic_err("Account has been banned."));
+    } else if is_deactivated(&deps.storage, &account_to_follow) {
+        return Err(StdError::generic_err("Account has been deactivated."));
+    } else if is_blocked_by(&deps.storage, &account_to_follow, &message_sender) {
+        return Err(StdError::unauthorized());
+    };
+
     store_following(&mut deps.storage, &message_sender, handle)?;
 
     Ok(HandleResponse {
@@ -1063,9 +1072,11 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                     Some(f) => {
                         let global_id = f.global_id.u128();
 
-                        // 1. Check if sender is blocked by fardel owner
+                        // 1. Check if sender is blocked by fardel owner or the owner's account has been deactivated/banned
                         let owner = get_fardel_owner(&deps.storage, global_id)?;
-                        if is_blocked_by(&deps.storage, &owner, &message_sender) {
+                        if is_banned(&deps.storage, &owner) || 
+                           is_deactivated(&deps.storage, &owner) ||
+                           is_blocked_by(&deps.storage, &owner, &message_sender) {
                             return Err(StdError::unauthorized());
                         }
 
@@ -1277,8 +1288,10 @@ pub fn try_rate_fardel<S: Storage, A: Api, Q: Querier>(
 
     // check that fardel has been unpacked by the user
     if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id).unpacked {
-        // check if user has already rated it
-        if has_rated(&deps.storage, &message_sender, fardel_id) {
+        let owner = get_fardel_owner(&deps.storage, fardel_id)?;
+        if is_blocked_by(&deps.storage, &owner, &message_sender) {
+            return Err(StdError::unauthorized());
+        } else if has_rated(&deps.storage, &message_sender, fardel_id) {
             status = Failure;
             msg = Some(String::from("Cannot rate a fardel more than once."));
         } else if rating {
@@ -1351,24 +1364,29 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
 
     if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id).unpacked {
         // fardel has been unpacked by the user
-        // add comment
-        comment_on_fardel(&mut deps.storage, &message_sender, fardel_id, comment)?;
+        let owner = get_fardel_owner(&deps.storage, fardel_id)?;
+        if is_blocked_by(&deps.storage, &owner, &message_sender) {
+            return Err(StdError::unauthorized());
+        } else {
+            // add comment
+            comment_on_fardel(&mut deps.storage, &message_sender, fardel_id, comment)?;
 
-        // handle rating if it is here
-        match rating {
-            Some(r) => {
-                if has_rated(&deps.storage, &message_sender, fardel_id) {
-                    status = Failure;
-                    msg = Some(String::from("Comment left but cannot rate a fardel more than once."));
-                } else if r {
-                    set_rated(&mut deps.storage, &message_sender, fardel_id, true)?;
-                    add_upvote_fardel(&mut deps.storage, fardel_id)?;
-                } else {
-                    set_rated(&mut deps.storage, &message_sender, fardel_id, false)?;
-                    add_downvote_fardel(&mut deps.storage, fardel_id)?;
-                }
-            },
-            _ => {}
+            // handle rating if it is here
+            match rating {
+                Some(r) => {
+                    if has_rated(&deps.storage, &message_sender, fardel_id) {
+                        status = Failure;
+                        msg = Some(String::from("Comment left but cannot rate a fardel more than once."));
+                    } else if r {
+                        set_rated(&mut deps.storage, &message_sender, fardel_id, true)?;
+                        add_upvote_fardel(&mut deps.storage, fardel_id)?;
+                    } else {
+                        set_rated(&mut deps.storage, &message_sender, fardel_id, false)?;
+                        add_downvote_fardel(&mut deps.storage, fardel_id)?;
+                    }
+                },
+                _ => {}
+            }
         }
     } else {
         // fardel has not been unpacked by the user
