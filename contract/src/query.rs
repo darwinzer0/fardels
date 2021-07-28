@@ -10,6 +10,7 @@ use crate::msg::{
 };
 use crate::state::{
     ReadonlyConfig,
+    get_total_fardel_count,
     get_account, get_account_for_handle,
     get_account_img,
     Fardel, get_fardel_by_global_id, get_fardel_by_hash,
@@ -655,7 +656,13 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
     let count = count.unwrap_or_else(|| Uint128(10)).u128();
 
     let mut fardels: Vec<FardelBatchResponse> = vec![];
-    for idx in start..(start+count) {
+    let mut end = start+count;
+    let total = get_total_fardel_count(&deps.storage);
+    if end > total {
+        end = total;
+    }
+    
+    for idx in start..end {
         let owner = get_fardel_owner(&deps.storage, idx)?;
         let banned = is_banned(&deps.storage, &owner);
         let deactivated = is_deactivated(&deps.storage, &owner);
@@ -694,7 +701,7 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                         sealed,
                         timestamp,
                         img,
-                        owner: deps.api.human_address(&owner)?,
+                        owner: account.owner,
                         handle: account.handle,
                     }
                 );
