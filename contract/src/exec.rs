@@ -887,7 +887,7 @@ pub fn try_hide_fardel<S: Storage, A: Api, Q: Querier>(
             let global_id = get_global_id_by_hash(&deps.storage, fardel_id)?;
             let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
             if owner.eq(&env.message.sender) {
-                hide_fardel(&mut deps.storage, fardel_id)?;
+                hide_fardel(&mut deps.storage, global_id)?;
             } else {
                 status = Failure;
                 msg = Some(String::from("You are not the owner of that fardel."))
