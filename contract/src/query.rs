@@ -177,6 +177,8 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
     page_size: Option<i32>,
 ) -> QueryResult {
     let account = get_account_for_handle(&deps.storage, &handle)?;
+    let banned = is_banned(&deps.storage, &account);
+    let deactivated = is_deactivated(&deps.storage, &account);
 
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
@@ -189,9 +191,6 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
             .filter(|fardel| {
                 let global_id = fardel.global_id.u128();
                 let mut unpacked = false;
-                let owner = get_fardel_owner(&deps.storage, global_id).unwrap();
-                let banned = is_banned(&deps.storage, &owner);
-                let deactivated = is_deactivated(&deps.storage, &owner);
                 let hidden = is_fardel_hidden(&deps.storage, global_id);
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
