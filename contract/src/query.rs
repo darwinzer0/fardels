@@ -1,6 +1,7 @@
 use cosmwasm_std::{
     to_binary, Api, Extern, HumanAddr, Querier, 
-    StdError, Storage, QueryResult, Uint128
+    StdError, Storage, QueryResult, Uint128,
+    debug_print,
 };
 use crate::msg::{
     QueryAnswer, ResponseStatus, CommentResponse,
@@ -132,7 +133,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     if address.is_some() {
         let unpacker_address = address.clone().unwrap();
         let unpacker = &deps.api.canonical_address(&unpacker_address)?;
-        if get_unpacked_status_by_fardel_id(&deps.storage, unpacker, global_id) {
+        if get_unpacked_status_by_fardel_id(&deps.storage, unpacker, global_id).unpacked {
             contents_data = Some(fardel.contents_data);
             unpacked = true;
         } else if banned || deactivated || hidden {
@@ -201,7 +202,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
                     let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id) {
+                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id).unpacked {
                         unpacked = true;
                     }
                 }
@@ -246,7 +247,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
                     let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id) {
+                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id).unpacked {
                         contents_data = Some(fardel.contents_data.clone());
                         unpacked = true;
                     }
@@ -316,7 +317,7 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
     if address.is_some() {
         let unpacker_address = address.clone().unwrap();
         let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-        unpacked = get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id);
+        unpacked = get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id).unpacked;
     }
     if (banned || deactivated || hidden) && !unpacked {
         return Err(StdError::generic_err("Fardel not found."));
@@ -534,6 +535,7 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
     let unpacked_ids: Vec<u128> = get_unpacked_by_unpacker(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
+    debug_print!("unpacked ids length: {}", unpacked_ids.len());
     let mut fardels: Vec<FardelResponse> = vec![];
     for unpack_id in unpacked_ids {
         let fardel = get_fardel_by_global_id(&deps.storage, unpack_id)?;

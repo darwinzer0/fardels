@@ -1086,7 +1086,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                         let sent_amount: u128 = sent_coins[0].amount.u128();
 
                         // 2. check it has not already been unpacked by the user
-                        if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id) {
+                        if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id).unpacked {
                             status = Failure;
                             msg = Some(String::from("You have already unpacked this fardel."));
                         // 3. check not pending
@@ -1283,7 +1283,7 @@ pub fn try_rate_fardel<S: Storage, A: Api, Q: Querier>(
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
     // check that fardel has been unpacked by the user
-    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
+    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id).unpacked {
         let owner = get_fardel_owner(&deps.storage, fardel_id)?;
         if is_blocked_by(&deps.storage, &owner, &message_sender) {
             return Err(StdError::unauthorized());
@@ -1358,7 +1358,7 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
-    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
+    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id).unpacked {
         // fardel has been unpacked by the user
         let owner = get_fardel_owner(&deps.storage, fardel_id)?;
         if is_blocked_by(&deps.storage, &owner, &message_sender) {

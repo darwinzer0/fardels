@@ -1202,15 +1202,15 @@ pub fn is_blocked_by<S: ReadonlyStorage>(
 //       value == true means it is unpacked, value == false OR no record in storage means packed
 //
 
-//#[derive(Serialize, Deserialize, Clone, Debug)]
-//pub struct UnpackedFardel {
-//    pub fardel_id: u128,
-//}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UnpackedFardel {
+    pub fardel_id: u128,
+}
 
-//#[derive(Serialize, Deserialize, Clone, Debug)]
-//pub struct UnpackedStatus {
-//    pub unpacked: bool,
-//}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UnpackedStatus {
+    pub unpacked: bool,
+}
 
 pub fn store_unpack<S: Storage>(
     storage: &mut S,
@@ -1218,18 +1218,15 @@ pub fn store_unpack<S: Storage>(
     fardel_id: u128,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
-    //let mut store = AppendStoreMut::<UnpackedFardel, _>::attach_or_create(&mut store)?;
     let mut store = AppendStoreMut::<u128, _>::attach_or_create(&mut store)?;
-
+    
     //let unpacked_fardel = UnpackedFardel {
     //    fardel_id,
     //};
-    //store.push(&unpacked_fardel)?;
     store.push(&fardel_id)?;
-    //let unpacked_status = UnpackedStatus {
-    //    unpacked: true,
-    //};
-    let unpacked_status = true;
+    let unpacked_status = UnpackedStatus {
+        unpacked: true,
+    };
     map_global_id_to_unpacked_by_unpacker(storage, fardel_id, unpacker, unpacked_status)
 }
 
@@ -1238,25 +1235,23 @@ fn map_global_id_to_unpacked_by_unpacker<S: Storage>(
     store: &mut S,
     global_id: u128,
     unpacker: &CanonicalAddr,
-    //value: UnpackedStatus,
-    unpacked_status: bool,
+    value: UnpackedStatus,
 ) -> StdResult<()> {
     let mut storage = PrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], store);
-    set_bin_data(&mut storage, &global_id.to_be_bytes(), &unpacked_status)
+    set_bin_data(&mut storage, &global_id.to_be_bytes(), &value)
 }
+
 
 // get the unpacked status of a fardel for a given unpacker canonical address
 pub fn get_unpacked_status_by_fardel_id<S: Storage>(
     storage: &S, 
     unpacker: &CanonicalAddr,
     fardel_id: u128,
-//) -> UnpackedStatus {
-) -> bool {
+) -> UnpackedStatus {
     let mapping_store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], storage);
-    get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
-        //UnpackedStatus{
-        //unpacked: false,
-    //})
+    get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| UnpackedStatus{
+        unpacked: false,
+    })
 }
 
 // gets a list of unpacked fardels for a given unpacker canonical address
