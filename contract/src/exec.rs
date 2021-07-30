@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use cosmwasm_std::{
     to_binary, Api, Coin, Env, Extern, HandleResponse, Querier, 
     CosmosMsg, BankMsg, HumanAddr, CanonicalAddr,
@@ -16,10 +17,11 @@ use crate::state::{Config, ReadonlyConfig,
     store_account, store_account_img, store_account_ban, store_account_block,
     Fardel, get_fardel_by_hash, get_fardel_by_global_id, get_fardel_owner, seal_fardel, 
     hide_fardel, unhide_fardel, store_fardel, 
-    get_fardel_next_package, store_fardel_next_package, store_pending_unpack,
+    store_pending_unpack,
     get_global_id_by_hash, get_total_fardel_count, store_fardel_img, 
     store_following, remove_following,
     store_account_deactivated,
+    increment_fardel_unpack_count, decrement_fardel_unpack_count,
     PendingUnpackApproval, cancel_pending_unpack, get_pending_unpacked_status_by_fardel_id,
     get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
     get_pending_approvals_from_start, get_pending_start, set_pending_start,
@@ -731,9 +733,9 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
     env: Env,
     public_message: String,
     tags: Vec<String>,
-    contents_data: Vec<String>,
+    contents_data: String,
     cost: Uint128,
-    countable: bool,
+    countable: Option<i32>,
     approval_req: bool,
     img: Option<String>,
     seal_time: Option<i32>,
@@ -762,21 +764,22 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
         } 
     }
 
-    let contents_data_size = contents_data.iter().fold(0_usize, |acc, x| acc + x.as_bytes().len());
+    //let contents_data_size = contents_data.iter().fold(0_usize, |acc, x| acc + x.as_bytes().len());
+    let contents_data_size = contents_data.as_bytes().len();
+
+    let countable_value: u16 = match countable {
+        Some(value) => u16::try_from(value).or_else(|_| Err(StdError::generic_err("invalid countable value"))),
+        None => Ok(0_u16),
+    }.unwrap();
 
     if !tag_size_ok ||
        !img_size_ok ||
        (public_message.as_bytes().len() > constants.max_public_message_len.into()) ||
        (tags.len() > constants.max_number_of_tags.into()) || 
        (contents_data_size > constants.max_contents_data_len.into()) ||
-       (cost.u128() > constants.max_cost) ||
-       (contents_data.len() == 0) {
+       (cost.u128() > constants.max_cost) {
         status = Failure;
         msg = Some(String::from("Invalid fardel data"));
-    } else if !countable && contents_data.len() != 1 {
-        // non-countable fardels can only have one package
-        status = Failure;
-        msg = Some(String::from("Invalid fardel data: non-countable fardels can only have one package"));
     } else {
         let stored_seal_time = valid_seal_time(seal_time)?;
 
@@ -807,7 +810,7 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
                 amount: cost,
                 denom: DENOM.to_string(),
             },
-            countable,
+            countable: countable_value,
             approval_req,
             seal_time: stored_seal_time,
             timestamp: env.block.time,
@@ -973,9 +976,9 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
             store_unpack(
                 &mut deps.storage, 
                 &pending_approval.unpacker, 
-                pending_approval.fardel_id, 
-                pending_approval.package_idx,
+                pending_approval.fardel_id,
             )?;
+            // no need to increment # of unpacks for fardel because we already did that
 
             // handle the transaction
             let cost = pending_approval.coin.amount.u128();
@@ -1054,7 +1057,6 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     let mut contents_data: Option<String> = None;
     let mut cost: u128 = 0;
     let mut canonical_owner: Option<CanonicalAddr> = None;
-    let mut package_id = 0;
 
     // fardel id from hash
     let fardel_id = fardel_id.u128();
@@ -1082,12 +1084,9 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
 
                         cost = f.cost.amount.u128();
                         let sent_amount: u128 = sent_coins[0].amount.u128();
-                        let next_package = get_fardel_next_package(&deps.storage, global_id).unwrap_or_else(|_| 0_u16);
-                        let total = f.contents_data.len() as u16;
-                        let num_packages_left = 0_u16.max(total - next_package);
 
                         // 2. check it has not already been unpacked by the user
-                        if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id).unpacked {
+                        if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id) {
                             status = Failure;
                             msg = Some(String::from("You have already unpacked this fardel."));
                         // 3. check not pending
@@ -1104,8 +1103,8 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
                         // 6. check that countable packages have not been all unpacked
-                        } else if f.countable && num_packages_left == 0 {
-                            seal_fardel(&mut deps.storage, global_id)?;
+                        } else if f.clone().sold_out(&deps.storage) {
+                            // we don't seal here, just in case someone cancels a pending unpack and it re-opens
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));
                         // 7. check cost is correct
@@ -1113,29 +1112,25 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                             status = Failure;
                             msg = Some(String::from("Didn't send correct amount of coins to unpack."));
                         } else {
-                            package_id = next_package.clone();
                             if f.approval_req {
                                 // do a pending unpack
                                 store_pending_unpack(
                                     &mut deps.storage, 
                                     &owner, 
                                     &message_sender, 
-                                    global_id, 
-                                    next_package,
+                                    global_id,
                                     env.message.sent_funds[0].clone(),
                                     env.block.time,
                                 )?;
+                                increment_fardel_unpack_count(&mut deps.storage, global_id);
                                 pending = true;
                                 msg = Some(String::from("Fardel unpack is pending approval by owner."));
                             } else {
-                                store_unpack(&mut deps.storage, &message_sender, global_id, next_package)?;
-                                contents_data = Some(f.contents_data[next_package as usize].clone());
+                                store_unpack(&mut deps.storage, &message_sender, global_id)?;
+                                increment_fardel_unpack_count(&mut deps.storage, global_id);
+                                contents_data = Some(f.contents_data);
                             }
 
-                            // both pending and completed unpacks use up a countable package
-                            if f.countable {
-                                store_fardel_next_package(&mut deps.storage, global_id, next_package + 1)?;
-                            }
                             canonical_owner = Some(owner);
                         }
                     },
@@ -1207,8 +1202,8 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
             }));
         }
 
-        append_sale_tx(&mut deps.storage, canonical_owner.clone().unwrap(), message_sender.clone(), fardel_id, package_id.into(), cost, commission_amount, env.block.time)?;
-        append_purchase_tx(&mut deps.storage, canonical_owner.unwrap(), message_sender, fardel_id, package_id.into(), cost, commission_amount, env.block.time)?;
+        append_sale_tx(&mut deps.storage, canonical_owner.clone().unwrap(), message_sender.clone(), fardel_id, cost, commission_amount, env.block.time)?;
+        append_purchase_tx(&mut deps.storage, canonical_owner.unwrap(), message_sender, fardel_id, cost, commission_amount, env.block.time)?;
     } else { // return coins to sender if there was a Failure
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address.clone(),
@@ -1252,6 +1247,7 @@ pub fn try_cancel_pending<S: Storage, A: Api, Q: Querier>(
 
     let unpacker = deps.api.canonical_address(&env.message.sender)?;
     cancel_pending_unpack(&mut deps.storage, &owner, &unpacker, fardel_id)?;
+    decrement_fardel_unpack_count(&mut deps.storage, fardel_id);
 
     if status == Success {
         // return coins to sender
@@ -1287,7 +1283,7 @@ pub fn try_rate_fardel<S: Storage, A: Api, Q: Querier>(
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
     // check that fardel has been unpacked by the user
-    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id).unpacked {
+    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
         let owner = get_fardel_owner(&deps.storage, fardel_id)?;
         if is_blocked_by(&deps.storage, &owner, &message_sender) {
             return Err(StdError::unauthorized());
@@ -1362,7 +1358,7 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
     let message_sender = deps.api.canonical_address(&env.message.sender)?;
     let fardel_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
 
-    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id).unpacked {
+    if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, fardel_id) {
         // fardel has been unpacked by the user
         let owner = get_fardel_owner(&deps.storage, fardel_id)?;
         if is_blocked_by(&deps.storage, &owner, &message_sender) {

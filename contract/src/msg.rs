@@ -150,17 +150,15 @@ pub enum HandleMsg {
         /// tags is a vector of labels used to facilitate search
         tags: Vec<String>,
 
-        /// contents_data is a vector of private data (JSON strings) only accessible upon unpacking
-        contents_data: Vec<String>,
+        /// contents_data is private data (UI expects JSON string) only accessible upon unpacking
+        contents_data: String,
 
         /// cost in uscrt
         cost: Uint128,
 
-        /// countable determines how data will be unpacked
-        ///   false: No limit on number of sales. If false, then contents_data length must be 1
-        ///   true:  Each element of contents_data vec can only be unpacked by one account.
-        ///          Once all the contents are unpacked the fardel will be sealed.
-        countable: bool,
+        /// countable determines maximum number of times a fardel can be unpacked
+        ///   None: No limit on number of sales. 
+        countable: Option<i32>,
 
         /// approval_req means each unpacking requires approval before the transaction is completed
         approval_req: bool,
@@ -562,7 +560,7 @@ pub struct FardelResponse {
     pub sealed: bool,
     pub tags: Vec<String>,
     // returns only latest comments, use GetComments for older comments
-    pub comments: Vec<CommentResponse>,
+    // pub comments: Vec<CommentResponse>,
     // total number of comments
     pub number_of_comments: i32,
     pub upvotes: i32,
@@ -570,6 +568,8 @@ pub struct FardelResponse {
     pub timestamp: i32,
     pub img: String,
     pub seal_time: Option<i32>,
+    // if countable returns the number for sale
+    pub countable: Option<i32>,
     // unpacked parts
     pub contents_data: Option<String>,
 }
@@ -582,7 +582,6 @@ pub struct FardelBatchResponse {
     pub handle: String,
     pub public_message: String,
     pub cost: Uint128,
-    pub unpacked: bool,
     pub sealed: bool,
     pub tags: Vec<String>,
     // total number of comments
@@ -592,6 +591,7 @@ pub struct FardelBatchResponse {
     pub timestamp: i32,
     pub img: String,
     pub seal_time: Option<i32>,
+    pub countable: Option<i32>, 
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

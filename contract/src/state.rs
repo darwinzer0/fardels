@@ -24,7 +24,7 @@ pub const PREFIX_ID_FARDEL_MAPPINGS: &[u8] = b"id-to-fardel";
 pub const PREFIX_HASH_ID_MAPPINGS: &[u8] = b"hash-to-id";
 pub const PREFIX_SEALED: &[u8] = b"sealed";
 pub const PREFIX_HIDDEN: &[u8] = b"hidden";
-pub const PREFIX_FARDEL_NEXT_PACKAGE: &[u8] = b"next";
+pub const PREFIX_FARDEL_NUM_UNPACKS: &[u8] = b"fardel-unpack-count";
 
 // Fardel unpacking
 pub const PREFIX_UNPACKED: &[u8] = b"unpacked";
@@ -206,9 +206,9 @@ pub struct Fardel {
     pub hash_id: Uint128,
     pub public_message: String,
     pub tags: Vec<String>,
-    pub contents_data: Vec<String>,
+    pub contents_data: String,
     pub cost: Coin,
-    pub countable: bool,
+    pub countable: u16,
     pub approval_req: bool,
     pub seal_time: u64,
     pub timestamp: u64,
@@ -219,15 +219,12 @@ impl Fardel {
         let stored_tags = self.tags.iter().map(|tag|
             tag.as_bytes().to_vec()
         ).collect();
-        let stored_contents_data = self.contents_data.iter().map(|package|
-            package.as_bytes().to_vec()
-        ).collect();
         let fardel = StoredFardel {
             global_id: self.global_id.u128(),
             hash_id: self.hash_id.u128(),
             public_message: self.public_message.as_bytes().to_vec(),
             tags: stored_tags,
-            contents_data: stored_contents_data,
+            contents_data: self.contents_data.as_bytes().to_vec(),
             cost: self.cost.amount.u128(),
             countable: self.countable,
             approval_req: self.approval_req,
@@ -237,14 +234,14 @@ impl Fardel {
         Ok(fardel)
     }
 
-    pub fn number_of_packages(self) -> u16 {
-        self.contents_data.len() as u16
-    }
-
-    pub fn number_of_packages_left<S: ReadonlyStorage>(self, storage: &S) -> u16 {
-        let next_package = get_fardel_next_package(storage, self.global_id.u128()).unwrap_or_else(|_| 0_u16);
-        let total = self.contents_data.len() as u16;
-        0_u16.min(total - next_package)
+    pub fn sold_out<S: ReadonlyStorage>(self, storage: &S) -> bool {
+        if self.countable > 0 {
+            let num_unpacks = get_fardel_unpack_count(storage, self.global_id.u128()).unwrap_or_else(|_| 0_u64);
+            if num_unpacks >= self.countable.into() {
+                return true;
+            }
+        } 
+        return false;
     }
 }
 
@@ -254,9 +251,9 @@ pub struct StoredFardel {
     pub hash_id: u128,
     pub public_message: Vec<u8>,
     pub tags: Vec<Vec<u8>>,
-    pub contents_data: Vec<Vec<u8>>,
+    pub contents_data: Vec<u8>,
     pub cost: u128,
-    pub countable: bool,
+    pub countable: u16,
     pub approval_req: bool,
     pub seal_time: u64,
     pub timestamp: u64,
@@ -267,15 +264,12 @@ impl StoredFardel {
         let humanized_tags = self.tags.iter().map(|tag|
             String::from_utf8(tag.clone()).ok().unwrap_or_default()
         ).collect();
-        let humanized_contents_data = self.contents_data.iter().map(|package|
-            String::from_utf8(package.clone()).ok().unwrap_or_default()
-        ).collect();
         let fardel = Fardel {
             global_id: Uint128(self.global_id),
             hash_id: Uint128(self.hash_id),
             public_message: String::from_utf8(self.public_message).ok().unwrap_or_default(),
             tags: humanized_tags,
-            contents_data: humanized_contents_data,
+            contents_data: String::from_utf8(self.contents_data).ok().unwrap_or_default(),
             cost: Coin { amount: Uint128(self.cost), denom: DENOM.to_string() },
             countable: self.countable,
             approval_req: self.approval_req,
@@ -285,14 +279,14 @@ impl StoredFardel {
         Ok(fardel)
     }
 
-    pub fn number_of_packages(self) -> u16 {
-        self.contents_data.len() as u16
-    }
-
-    pub fn number_of_packages_left<S: ReadonlyStorage>(self, storage: &S) -> u16 {
-        let next_package = get_fardel_next_package(storage, self.global_id).unwrap_or_else(|_| 0_u16);
-        let total = self.contents_data.len() as u16;
-        0_u16.min(total - next_package)
+    pub fn sold_out<S: ReadonlyStorage>(self, storage: &S) -> bool {
+        if self.countable > 0 {
+            let num_unpacks = get_fardel_unpack_count(storage, self.global_id).unwrap_or_else(|_| 0_u64);
+            if num_unpacks >= self.countable.into() {
+                return true;
+            }
+        } 
+        return false;
     }
 }
 
@@ -314,9 +308,9 @@ pub fn store_fardel<S: Storage>(
     owner: &CanonicalAddr,
     public_message: Vec<u8>,
     tags: Vec<Vec<u8>>,
-    contents_data: Vec<Vec<u8>>,
+    contents_data: Vec<u8>,
     cost: u128,
-    countable: bool,
+    countable: u16,
     approval_req: bool,
     seal_time: u64,
     timestamp: u64,
@@ -340,14 +334,12 @@ pub fn store_fardel<S: Storage>(
     let index: u32 = append_fardel(store, &owner, fardel.clone())?;
     map_global_id_to_fardel(store, global_id.clone(), &owner, index)?;
     map_hash_id_to_global_id(store, hash_id, global_id.clone())?;
-    store_fardel_next_package(store, global_id.clone(), 0_u16)?;
+    store_fardel_unpack_count(store, global_id.clone(), 0_u64)?;
 
     // automatically unpack for the owner
     // TODO: make so can just view own fardels without unpacking
-    for (i, _) in contents_data.iter().enumerate() {
-        store_unpack(store, &owner, global_id.clone(), i as u16)?;
-    }
-
+    store_unpack(store, &owner, global_id.clone())?;
+    
     // update global fardel count
     set_bin_data(store, KEY_FARDEL_COUNT, &(global_id + 1))?;
 
@@ -383,25 +375,55 @@ fn map_global_id_to_fardel<S: Storage>(
 }
 
 //
-// Stores the current index of the next package in countable fardels,
+// Stores the number of times the fardel has been unpacked
+//   Pending unpacks count, but cancel will decrement the count again
 //   Or always 0 in uncountable fardels.
-//   b"next" | {fardel global_id} | {next package idx}
+//   b"fardel-unpack-count" | {fardel global_id} | {count}
 //
-pub fn store_fardel_next_package<S: Storage>(
-    store: &mut S,
+pub fn store_fardel_unpack_count<S: Storage>(
+    storage: &mut S,
     fardel_id: u128,
-    next_package: u16,
+    new_unpack_count: u64,
 ) -> StdResult<()> {
-    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NEXT_PACKAGE, store);
-    set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &next_package)
+    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NUM_UNPACKS, storage);
+    set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &new_unpack_count)
 }
 
-pub fn get_fardel_next_package<S: ReadonlyStorage>(
+pub fn get_fardel_unpack_count<S: ReadonlyStorage>(
     storage: &S,
     fardel_id: u128,
-) -> StdResult<u16> {
-    let storage = ReadonlyPrefixedStorage::new(PREFIX_FARDEL_NEXT_PACKAGE, storage);
+) -> StdResult<u64> {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_FARDEL_NUM_UNPACKS, storage);
     get_bin_data(&storage, &fardel_id.to_be_bytes())
+}
+
+pub fn increment_fardel_unpack_count<S: Storage>(
+    storage: &mut S,
+    fardel_id: u128,
+) -> Option<u64> {
+    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NUM_UNPACKS, storage);
+    let unpack_count = get_fardel_unpack_count(&storage, fardel_id).unwrap_or_else(|_| 0_u64);
+    let result = store_fardel_unpack_count(&mut storage, fardel_id, unpack_count + 1);
+    match result {
+        Ok(_) => Some(unpack_count + 1),
+        Err(_) => None
+    }
+}
+
+pub fn decrement_fardel_unpack_count<S: Storage>(
+    storage: &mut S,
+    fardel_id: u128,
+) -> Option<u64> {
+    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NUM_UNPACKS, storage);
+    let unpack_count = get_fardel_unpack_count(&storage, fardel_id).unwrap_or_else(|_| 0_u64);
+    if unpack_count < 1 {
+        return None;
+    }
+    let result = store_fardel_unpack_count(&mut storage, fardel_id, unpack_count - 1);
+    match result {
+        Ok(_) => Some(unpack_count - 1),
+        Err(_) => None
+    }
 }
 
 // Stores a mapping from hash id to global_id in prefixed storage
@@ -1180,36 +1202,34 @@ pub fn is_blocked_by<S: ReadonlyStorage>(
 //       value == true means it is unpacked, value == false OR no record in storage means packed
 //
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct UnpackedFardel {
-    pub fardel_id: u128,
-    pub package_idx: u16,
-}
+//#[derive(Serialize, Deserialize, Clone, Debug)]
+//pub struct UnpackedFardel {
+//    pub fardel_id: u128,
+//}
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct UnpackedStatus {
-    pub unpacked: bool,
-    pub package_idx: u16,
-}
+//#[derive(Serialize, Deserialize, Clone, Debug)]
+//pub struct UnpackedStatus {
+//    pub unpacked: bool,
+//}
 
 pub fn store_unpack<S: Storage>(
     storage: &mut S,
     unpacker: &CanonicalAddr,
     fardel_id: u128,
-    package_idx: u16,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
-    let mut store = AppendStoreMut::<UnpackedFardel, _>::attach_or_create(&mut store)?;
-    
-    let unpacked_fardel = UnpackedFardel {
-        fardel_id,
-        package_idx,
-    };
-    store.push(&unpacked_fardel)?;
-    let unpacked_status = UnpackedStatus {
-        unpacked: true,
-        package_idx: package_idx,
-    };
+    //let mut store = AppendStoreMut::<UnpackedFardel, _>::attach_or_create(&mut store)?;
+    let mut store = AppendStoreMut::<u128, _>::attach_or_create(&mut store)?;
+
+    //let unpacked_fardel = UnpackedFardel {
+    //    fardel_id,
+    //};
+    //store.push(&unpacked_fardel)?;
+    store.push(&fardel_id)?;
+    //let unpacked_status = UnpackedStatus {
+    //    unpacked: true,
+    //};
+    let unpacked_status = true;
     map_global_id_to_unpacked_by_unpacker(storage, fardel_id, unpacker, unpacked_status)
 }
 
@@ -1218,10 +1238,11 @@ fn map_global_id_to_unpacked_by_unpacker<S: Storage>(
     store: &mut S,
     global_id: u128,
     unpacker: &CanonicalAddr,
-    value: UnpackedStatus,
+    //value: UnpackedStatus,
+    unpacked_status: bool,
 ) -> StdResult<()> {
     let mut storage = PrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], store);
-    set_bin_data(&mut storage, &global_id.to_be_bytes(), &value)
+    set_bin_data(&mut storage, &global_id.to_be_bytes(), &unpacked_status)
 }
 
 // get the unpacked status of a fardel for a given unpacker canonical address
@@ -1229,12 +1250,13 @@ pub fn get_unpacked_status_by_fardel_id<S: Storage>(
     storage: &S, 
     unpacker: &CanonicalAddr,
     fardel_id: u128,
-) -> UnpackedStatus {
+//) -> UnpackedStatus {
+) -> bool {
     let mapping_store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], storage);
-    get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| UnpackedStatus{
-        unpacked: false,
-        package_idx: 0,
-    })
+    get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
+        //UnpackedStatus{
+        //unpacked: false,
+    //})
 }
 
 // gets a list of unpacked fardels for a given unpacker canonical address
@@ -1298,7 +1320,6 @@ pub fn get_number_of_unpacked_by_unpacker<S: Storage>(
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PendingUnpackApproval {
     pub fardel_id: u128,
-    pub package_idx: u16,
     pub unpacker: CanonicalAddr,
     pub coin: Coin,
     pub timestamp: u64,
@@ -1327,7 +1348,6 @@ pub fn store_pending_unpack<S: Storage>(
     owner: &CanonicalAddr,
     unpacker: &CanonicalAddr,
     fardel_id: u128,
-    package_idx: u16,
     sent_funds: Coin,
     timestamp: u64,
 ) -> StdResult<()> {
@@ -1336,7 +1356,6 @@ pub fn store_pending_unpack<S: Storage>(
     
     let pending_unpack = PendingUnpackApproval {
         fardel_id,
-        package_idx,
         unpacker: unpacker.clone(),
         coin: sent_funds,
         timestamp,
@@ -1726,7 +1745,6 @@ pub fn subtract_from_commission_balance<S: Storage>(
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SaleTx {
     pub fardel_id: Uint128,
-    pub package_idx: i32,
     pub handle: String,
     pub amount: Uint128,
     pub fee: Uint128,
@@ -1736,7 +1754,6 @@ pub struct SaleTx {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StoredSaleTx {
     pub fardel_id: u128,
-    pub package_idx: u32,
     pub unpacker: CanonicalAddr,
     pub amount: u128,
     pub fee: u128,
@@ -1749,7 +1766,6 @@ impl StoredSaleTx {
         let unpacker = get_account(storage, &self.unpacker)?;
         let tx = SaleTx {
             fardel_id: fardel.hash_id,
-            package_idx: self.package_idx as i32,
             handle: String::from_utf8(unpacker.handle).ok().unwrap_or_default(),
             amount: Uint128(self.amount),
             fee: Uint128(self.fee),
@@ -1765,7 +1781,6 @@ pub fn append_sale_tx<S: Storage>(
     owner: CanonicalAddr,
     unpacker: CanonicalAddr,
     fardel_id: u128,
-    package_idx: u32,
     amount: u128,
     fee: u128,
     timestamp: u64,
@@ -1774,7 +1789,6 @@ pub fn append_sale_tx<S: Storage>(
     let mut store = AppendStoreMut::<StoredSaleTx, _>::attach_or_create(&mut store)?;
     let tx = StoredSaleTx {
         fardel_id,
-        package_idx,
         unpacker,
         amount,
         fee,
@@ -1822,7 +1836,6 @@ pub fn get_sale_txs<S: ReadonlyStorage>(
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PurchaseTx {
     pub fardel_id: Uint128,
-    pub package_idx: i32,
     pub handle: String,
     pub amount: Uint128,
     pub fee: Uint128,
@@ -1832,7 +1845,6 @@ pub struct PurchaseTx {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StoredPurchaseTx {
     pub fardel_id: u128,
-    pub package_idx: u32,
     pub owner: CanonicalAddr,
     pub amount: u128,
     pub fee: u128,
@@ -1845,7 +1857,6 @@ impl StoredPurchaseTx {
         let owner = get_account(storage, &self.owner)?;
         let tx = PurchaseTx {
             fardel_id: fardel.hash_id,
-            package_idx: self.package_idx as i32,
             handle: String::from_utf8(owner.handle).ok().unwrap_or_default(),
             amount: Uint128(self.amount),
             fee: Uint128(self.fee),
@@ -1861,7 +1872,6 @@ pub fn append_purchase_tx<S: Storage>(
     owner: CanonicalAddr,
     unpacker: CanonicalAddr,
     fardel_id: u128,
-    package_idx: u32,
     amount: u128,
     fee: u128,
     timestamp: u64,
@@ -1870,7 +1880,6 @@ pub fn append_purchase_tx<S: Storage>(
     let mut store = AppendStoreMut::<StoredPurchaseTx, _>::attach_or_create(&mut store)?;
     let tx = StoredPurchaseTx {
         fardel_id,
-        package_idx,
         owner,
         amount,
         fee,

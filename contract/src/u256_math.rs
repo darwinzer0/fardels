@@ -22,16 +22,20 @@ pub fn div(nom: Option<U256>, denom: Option<U256>) -> Option<U256> {
     }
 }
 
+/*
 fn checked_add(b: U256) -> impl Fn(U256) -> Option<U256> {
     move |a: U256| a.checked_add(b)
 }
+*/
 
+/*
 pub fn add(a: Option<U256>, b: Option<U256>) -> Option<U256> {
     match b {
         Some(b) => a.and_then(checked_add(b)),
         None => None,
     }
 }
+*/
 
 fn checked_mul(b: U256) -> impl Fn(U256) -> Option<U256> {
     move |a: U256| a.checked_mul(b)
@@ -44,6 +48,7 @@ pub fn mul(a: Option<U256>, b: Option<U256>) -> Option<U256> {
     }
 }
 
+/*
 /// U256 sqrt ported from here: https://ethereum.stackexchange.com/a/87713/12112
 ///
 /// function sqrt(uint y) internal pure returns (uint z) {
@@ -78,3 +83,4 @@ pub fn u256_sqrt(y: U256) -> Option<U256> {
 
     return Some(z);
 }
+*/

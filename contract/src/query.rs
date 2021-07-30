@@ -94,6 +94,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     let downvotes: i32 = get_downvotes(&deps.storage, global_id) as i32;
 
     // get last 10 comments
+    /*
     let comments: Vec<CommentResponse> = get_comments(&deps.storage, global_id, 0_u32, 10_u32)?
         .iter()
         .map(|c| {
@@ -116,6 +117,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
             }
         })
         .collect();
+    */
     let number_of_comments = get_number_of_comments(&deps.storage, global_id) as i32;
 
     // unpacked parts
@@ -130,9 +132,8 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     if address.is_some() {
         let unpacker_address = address.clone().unwrap();
         let unpacker = &deps.api.canonical_address(&unpacker_address)?;
-        let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, unpacker, global_id);
-        if unpacked_status.unpacked {
-            contents_data = Some(fardel.contents_data[unpacked_status.package_idx as usize].clone());
+        if get_unpacked_status_by_fardel_id(&deps.storage, unpacker, global_id) {
+            contents_data = Some(fardel.contents_data);
             unpacked = true;
         } else if banned || deactivated || hidden {
             return Err(StdError::generic_err("Fardel not found."));
@@ -148,6 +149,10 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     }
     let sealed = get_sealed_status(&deps.storage, global_id);
     let img = get_fardel_img(&deps.storage, global_id);
+    let mut countable: Option<i32> = None;
+    if fardel.countable > 0 {
+        countable = Some(fardel.countable as i32);
+    }
     let fardel_response = FardelResponse {
         id: fardel.hash_id,
         public_message: fardel.public_message,
@@ -157,7 +162,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         upvotes,
         downvotes,
         number_of_comments,
-        comments,
+        countable,
         seal_time,
         sealed,
         timestamp,
@@ -196,8 +201,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
                     let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-                    let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id);
-                    if unpacked_status.unpacked {
+                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id) {
                         unpacked = true;
                     }
                 }
@@ -209,6 +213,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 let downvotes: i32 = get_downvotes(&deps.storage, global_id) as i32;
 
                 // get last 10 comments
+                /*
                 let comments: Vec<CommentResponse> = get_comments(&deps.storage, global_id, 0_u32, 10_u32).unwrap()
                     .iter()
                     .map(|c| {
@@ -231,6 +236,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                         }
                     })
                     .collect();
+                */
                 let number_of_comments = get_number_of_comments(&deps.storage, global_id) as i32;
 
                 // unpacked parts
@@ -240,9 +246,8 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
                     let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-                    let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id);
-                    if unpacked_status.unpacked {
-                        contents_data = Some(fardel.contents_data[unpacked_status.package_idx as usize].clone());
+                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id) {
+                        contents_data = Some(fardel.contents_data.clone());
                         unpacked = true;
                     }
                 }
@@ -254,6 +259,11 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 }
                 let sealed = get_sealed_status(&deps.storage, global_id);
                 let img = get_fardel_img(&deps.storage, global_id);
+                let mut countable: Option<i32> = None;
+                if fardel.countable > 0 {
+                    countable = Some(fardel.countable as i32);
+                }
+
                 FardelResponse {
                     id: fardel.hash_id,
                     public_message: fardel.public_message.clone(),
@@ -263,7 +273,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     upvotes,
                     downvotes,
                     number_of_comments,
-                    comments,
+                    countable,
                     seal_time,
                     sealed,
                     timestamp,
@@ -306,10 +316,7 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
     if address.is_some() {
         let unpacker_address = address.clone().unwrap();
         let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-        let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id);
-        if unpacked_status.unpacked {
-            unpacked = true;
-        }
+        unpacked = get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id);
     }
     if (banned || deactivated || hidden) && !unpacked {
         return Err(StdError::generic_err("Fardel not found."));
@@ -536,13 +543,9 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
             let upvotes: i32 = get_upvotes(&deps.storage, unpack_id) as i32;
             let downvotes: i32 = get_downvotes(&deps.storage, unpack_id) as i32;
             // don't get comments
-            let comments: Vec<CommentResponse> = vec![];
+            //let comments: Vec<CommentResponse> = vec![];
 
             let number_of_comments = get_number_of_comments(&deps.storage, unpack_id) as i32;
-
-            // we know they are unpacked but we need package_idx
-            let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, &address, unpack_id);
-            let contents_data = Some(fardel.contents_data[unpacked_status.package_idx as usize].clone());
 
             let timestamp: i32 = fardel.timestamp as i32;
             let mut seal_time: Option<i32> = None;
@@ -551,6 +554,10 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
             }
             let sealed = get_sealed_status(&deps.storage, unpack_id);
             let img = get_fardel_img(&deps.storage, unpack_id);
+            let mut countable: Option<i32> = None;
+            if fardel.countable > 0 {
+                countable = Some(fardel.countable as i32);
+            }
             fardels.push(FardelResponse {
                 id: fardel.hash_id,
                 public_message: fardel.public_message.clone(),
@@ -560,11 +567,11 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
                 upvotes,
                 downvotes,
                 number_of_comments,
-                comments,
+                countable,
                 seal_time,
                 sealed,
                 timestamp,
-                contents_data,
+                contents_data: Some(fardel.contents_data),
                 img,
             });
         }
@@ -676,7 +683,6 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                 let downvotes: i32 = get_downvotes(&deps.storage, idx) as i32;
 
                 let number_of_comments = get_number_of_comments(&deps.storage, idx) as i32;
-                let unpacked = false;
                 let timestamp: i32 = fardel.timestamp as i32;
                 let mut seal_time: Option<i32> = None;
                 if fardel.seal_time > 0 {
@@ -685,6 +691,10 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                 let sealed = get_sealed_status(&deps.storage, idx);
                 let img = get_fardel_img(&deps.storage, idx);
                 let account = get_account(&deps.storage, &owner)?.into_humanized(&deps.api)?;
+                let mut countable: Option<i32> = None;
+                if fardel.countable > 0 {
+                    countable = Some(fardel.countable as i32);
+                }
                 // fardel batch only gets public data
                 fardels.push (
                     FardelBatchResponse {
@@ -693,10 +703,10 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                         public_message: fardel.public_message.clone(),
                         tags: fardel.tags,
                         cost: fardel.cost.amount,
-                        unpacked,
                         upvotes,
                         downvotes,
                         number_of_comments,
+                        countable,
                         seal_time,
                         sealed,
                         timestamp,
