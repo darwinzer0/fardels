@@ -1,14 +1,16 @@
-use std::any::type_name;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde::de::DeserializeOwned;
-use cosmwasm_std::{Api, Coin, CanonicalAddr, HumanAddr, Storage, StdError, StdResult, Uint128, 
-    ReadonlyStorage};
-use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
-use secret_toolkit::storage::{AppendStore, AppendStoreMut};
 use crate::contract::DENOM;
-use crate::viewing_key::ViewingKey;
 use crate::msg::Fee;
+use crate::viewing_key::ViewingKey;
+use cosmwasm_std::{
+    debug_print, Api, CanonicalAddr, Coin, HumanAddr, ReadonlyStorage, StdError, StdResult,
+    Storage, Uint128,
+};
+use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
+use schemars::JsonSchema;
+use secret_toolkit::storage::{AppendStore, AppendStoreMut};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use std::any::type_name;
 
 // Globals
 pub const PREFIX_CONFIG: &[u8] = b"config";
@@ -33,7 +35,6 @@ pub const PREFIX_ID_UNPACKED_MAPPINGS: &[u8] = b"id-to-unpacked";
 pub const PREFIX_PENDING_APPROVAL: &[u8] = b"pending";
 pub const PREFIX_PENDING_START: &[u8] = b"pending-start";
 // pending unpacks indexed by the unpacker of the fardel
-pub const PREFIX_PENDING_UNPACKS: &[u8] = b"pending-unpacks";
 pub const PREFIX_ID_PENDING_UNPACKED_MAPPINGS: &[u8] = b"id-to-pending";
 
 // Fardel rating/comments
@@ -59,6 +60,9 @@ pub const PREFIX_ACCOUNT_THUMBNAIL_IMGS: &[u8] = b"account-img";
 pub const PREFIX_HANDLES: &[u8] = b"handle";
 pub const PREFIX_VIEWING_KEY: &[u8] = b"viewingkey";
 pub const PREFIX_DEACTIVATED: &[u8] = b"deactived";
+
+// Registered addresses
+pub const PREFIX_REGISTERED_ADDRESSES: &[u8] = b"addresses";
 
 // Banned accounts
 pub const PREFIX_BANNED: &[u8] = b"banned";
@@ -92,7 +96,7 @@ pub struct Constants {
     pub max_description_len: u16,
     pub max_view_settings_len: u16,
     pub max_private_settings_len: u16,
-    
+
     pub prng_seed: Vec<u8>,
 }
 
@@ -156,7 +160,6 @@ impl<'a, S: ReadonlyStorage> ReadonlyConfigImpl<'a, S> {
         bincode2::deserialize::<Constants>(&consts_bytes)
             .map_err(|e| StdError::serialize_err(type_name::<Constants>(), e))
     }
-
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -178,23 +181,18 @@ impl StoredFee {
 //
 // Frozen status
 //
-pub fn set_frozen<S: Storage>(
-    storage: &mut S,
-    value: bool,
-) -> StdResult<()> {
+pub fn set_frozen<S: Storage>(storage: &mut S, value: bool) -> StdResult<()> {
     set_bin_data(storage, KEY_FROZEN, &value)
 }
 
-pub fn is_frozen<S: ReadonlyStorage>(
-    storage: &S,
-) -> bool {
+pub fn is_frozen<S: ReadonlyStorage>(storage: &S) -> bool {
     get_bin_data(storage, KEY_FROZEN).unwrap_or_else(|_| false)
 }
 
 //
 // Fardels
 //
-// are stored using multilevel prefixed + appendstore keys: 
+// are stored using multilevel prefixed + appendstore keys:
 //    b"fardels" | {owner canonical addr} | {appendstore index} -> Fardel
 //
 //  plus an additional mapping is stored to allow getting by global_id:
@@ -216,9 +214,11 @@ pub struct Fardel {
 
 impl Fardel {
     pub fn into_stored(self) -> StdResult<StoredFardel> {
-        let stored_tags = self.tags.iter().map(|tag|
-            tag.as_bytes().to_vec()
-        ).collect();
+        let stored_tags = self
+            .tags
+            .iter()
+            .map(|tag| tag.as_bytes().to_vec())
+            .collect();
         let fardel = StoredFardel {
             global_id: self.global_id.u128(),
             hash_id: self.hash_id.u128(),
@@ -236,11 +236,12 @@ impl Fardel {
 
     pub fn sold_out<S: ReadonlyStorage>(self, storage: &S) -> bool {
         if self.countable > 0 {
-            let num_unpacks = get_fardel_unpack_count(storage, self.global_id.u128()).unwrap_or_else(|_| 0_u64);
+            let num_unpacks =
+                get_fardel_unpack_count(storage, self.global_id.u128()).unwrap_or_else(|_| 0_u64);
             if num_unpacks >= self.countable.into() {
                 return true;
             }
-        } 
+        }
         return false;
     }
 }
@@ -261,16 +262,25 @@ pub struct StoredFardel {
 
 impl StoredFardel {
     pub fn into_humanized(self) -> StdResult<Fardel> {
-        let humanized_tags = self.tags.iter().map(|tag|
-            String::from_utf8(tag.clone()).ok().unwrap_or_default()
-        ).collect();
+        let humanized_tags = self
+            .tags
+            .iter()
+            .map(|tag| String::from_utf8(tag.clone()).ok().unwrap_or_default())
+            .collect();
         let fardel = Fardel {
             global_id: Uint128(self.global_id),
             hash_id: Uint128(self.hash_id),
-            public_message: String::from_utf8(self.public_message).ok().unwrap_or_default(),
+            public_message: String::from_utf8(self.public_message)
+                .ok()
+                .unwrap_or_default(),
             tags: humanized_tags,
-            contents_data: String::from_utf8(self.contents_data).ok().unwrap_or_default(),
-            cost: Coin { amount: Uint128(self.cost), denom: DENOM.to_string() },
+            contents_data: String::from_utf8(self.contents_data)
+                .ok()
+                .unwrap_or_default(),
+            cost: Coin {
+                amount: Uint128(self.cost),
+                denom: DENOM.to_string(),
+            },
             countable: self.countable,
             approval_req: self.approval_req,
             seal_time: self.seal_time,
@@ -281,11 +291,12 @@ impl StoredFardel {
 
     pub fn sold_out<S: ReadonlyStorage>(self, storage: &S) -> bool {
         if self.countable > 0 {
-            let num_unpacks = get_fardel_unpack_count(storage, self.global_id).unwrap_or_else(|_| 0_u64);
+            let num_unpacks =
+                get_fardel_unpack_count(storage, self.global_id).unwrap_or_else(|_| 0_u64);
             if num_unpacks >= self.countable.into() {
                 return true;
             }
-        } 
+        }
         return false;
     }
 }
@@ -296,9 +307,7 @@ pub struct GlobalIdFardelMapping {
     pub index: u32,
 }
 
-pub fn get_total_fardel_count<S: ReadonlyStorage>(
-    storage: &S
-) -> u128 {
+pub fn get_total_fardel_count<S: ReadonlyStorage>(storage: &S) -> u128 {
     get_bin_data(storage, KEY_FARDEL_COUNT).unwrap_or_else(|_| 0_u128)
 }
 
@@ -339,7 +348,7 @@ pub fn store_fardel<S: Storage>(
     // automatically unpack for the owner
     // TODO: make so can just view own fardels without unpacking
     store_unpack(store, &owner, global_id.clone())?;
-    
+
     // update global fardel count
     set_bin_data(store, KEY_FARDEL_COUNT, &(global_id + 1))?;
 
@@ -369,7 +378,7 @@ fn map_global_id_to_fardel<S: Storage>(
     let mut storage = PrefixedStorage::new(PREFIX_ID_FARDEL_MAPPINGS, store);
     let mapping = GlobalIdFardelMapping {
         owner: owner.clone(),
-        index
+        index,
     };
     set_bin_data(&mut storage, &global_id.to_be_bytes(), &mapping)
 }
@@ -389,45 +398,34 @@ pub fn store_fardel_unpack_count<S: Storage>(
     set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &new_unpack_count)
 }
 
-pub fn get_fardel_unpack_count<S: ReadonlyStorage>(
-    storage: &S,
-    fardel_id: u128,
-) -> StdResult<u64> {
+pub fn get_fardel_unpack_count<S: ReadonlyStorage>(storage: &S, fardel_id: u128) -> StdResult<u64> {
     let storage = ReadonlyPrefixedStorage::new(PREFIX_FARDEL_NUM_UNPACKS, storage);
     get_bin_data(&storage, &fardel_id.to_be_bytes())
 }
 
-pub fn increment_fardel_unpack_count<S: Storage>(
-    storage: &mut S,
-    fardel_id: u128,
-) -> Option<u64> {
-    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NUM_UNPACKS, storage);
-    let unpack_count = get_fardel_unpack_count(&storage, fardel_id).unwrap_or_else(|_| 0_u64);
-    let result = store_fardel_unpack_count(&mut storage, fardel_id, unpack_count + 1);
+pub fn increment_fardel_unpack_count<S: Storage>(storage: &mut S, fardel_id: u128) -> Option<u64> {
+    let unpack_count = get_fardel_unpack_count(storage, fardel_id).unwrap_or_else(|_| 0_u64);
+    let result = store_fardel_unpack_count(storage, fardel_id, unpack_count + 1);
     match result {
         Ok(_) => Some(unpack_count + 1),
-        Err(_) => None
+        Err(_) => None,
     }
 }
 
-pub fn decrement_fardel_unpack_count<S: Storage>(
-    storage: &mut S,
-    fardel_id: u128,
-) -> Option<u64> {
-    let mut storage = PrefixedStorage::new(PREFIX_FARDEL_NUM_UNPACKS, storage);
-    let unpack_count = get_fardel_unpack_count(&storage, fardel_id).unwrap_or_else(|_| 0_u64);
+pub fn decrement_fardel_unpack_count<S: Storage>(storage: &mut S, fardel_id: u128) -> Option<u64> {
+    let unpack_count = get_fardel_unpack_count(storage, fardel_id).unwrap_or_else(|_| 0_u64);
     if unpack_count < 1 {
         return None;
     }
-    let result = store_fardel_unpack_count(&mut storage, fardel_id, unpack_count - 1);
+    let result = store_fardel_unpack_count(storage, fardel_id, unpack_count - 1);
     match result {
         Ok(_) => Some(unpack_count - 1),
-        Err(_) => None
+        Err(_) => None,
     }
 }
 
 // Stores a mapping from hash id to global_id in prefixed storage
-//   users see hash ids only. 
+//   users see hash ids only.
 //   Admin can access fardels directly by global (sequential) id for indexing.
 fn map_hash_id_to_global_id<S: Storage>(
     store: &mut S,
@@ -459,7 +457,8 @@ pub fn get_fardel_by_global_id<S: ReadonlyStorage>(
     //    _ => { return Err(StdError::generic_err(format!("could not get fardel mapping for global id {}", fardel_id))); }
     //};
 
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FARDELS, mapping.owner.as_slice()], storage);
+    let store =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_FARDELS, mapping.owner.as_slice()], storage);
     // Try to access the storage of fardels for the account.
     // If it doesn't exist yet, return None.
     let store = if let Some(result) = AppendStore::<StoredFardel, _>::attach(&store) {
@@ -470,28 +469,32 @@ pub fn get_fardel_by_global_id<S: ReadonlyStorage>(
 
     let stored_fardel: StoredFardel = match store.get_at(mapping.index) {
         Ok(f) => f,
-        _ => { return Err(StdError::generic_err(format!("Could not get stored fardel for global id {}", fardel_id)));}, 
+        _ => {
+            return Err(StdError::generic_err(format!(
+                "Could not get stored fardel for global id {}",
+                fardel_id
+            )));
+        }
     };
     let fardel: Fardel = stored_fardel.into_humanized()?;
     Ok(Some(fardel))
 }
 
-pub fn get_global_id_by_hash<S: ReadonlyStorage>(
-    storage: &S,
-    hash: u128,
-) -> StdResult<u128> {
+pub fn get_global_id_by_hash<S: ReadonlyStorage>(storage: &S, hash: u128) -> StdResult<u128> {
     let storage = ReadonlyPrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, storage);
     get_bin_data(&storage, &hash.to_be_bytes())
 }
 
-pub fn get_fardel_by_hash<S: ReadonlyStorage>(
-    store: &S,
-    hash: u128,
-) -> StdResult<Option<Fardel>> {
+pub fn get_fardel_by_hash<S: ReadonlyStorage>(store: &S, hash: u128) -> StdResult<Option<Fardel>> {
     let storage = ReadonlyPrefixedStorage::new(PREFIX_HASH_ID_MAPPINGS, store);
     let global_id: u128 = match get_bin_data(&storage, &hash.to_be_bytes()) {
         Ok(id) => id,
-        _ => { return Err(StdError::generic_err(format!("could not get global_id for hash_id {}", hash))); }
+        _ => {
+            return Err(StdError::generic_err(format!(
+                "could not get global_id for hash_id {}",
+                hash
+            )));
+        }
     };
     get_fardel_by_global_id(store, global_id)
 }
@@ -536,10 +539,7 @@ pub fn get_fardels<S: ReadonlyStorage>(
 }
 
 // returns total number of fardels for user
-pub fn get_number_of_fardels<S: ReadonlyStorage>(
-    storage: &S,
-    owner: &CanonicalAddr,
-) -> u32 {
+pub fn get_number_of_fardels<S: ReadonlyStorage>(storage: &S, owner: &CanonicalAddr) -> u32 {
     let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FARDELS, owner.as_slice()], storage);
 
     // Try to access the storage of fardels for the account.
@@ -558,28 +558,19 @@ pub fn get_number_of_fardels<S: ReadonlyStorage>(
 //       value == true means it is sealed, value == false OR no record in storage means not sealed
 //
 
-pub fn seal_fardel<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-) -> StdResult <()> {
+pub fn seal_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_SEALED, store);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &true)
 }
 
-pub fn unseal_fardel<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-) -> StdResult <()> {
+pub fn unseal_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_SEALED, store);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &false)
 }
 
 // get sealed status of a given fardel
 //  true means sealed, false means not sealed
-pub fn get_sealed_status<S: ReadonlyStorage>(
-    store: &S, 
-    fardel_id: u128,
-) -> bool {
+pub fn get_sealed_status<S: ReadonlyStorage>(store: &S, fardel_id: u128) -> bool {
     let store = ReadonlyPrefixedStorage::new(PREFIX_SEALED, store);
     get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
 }
@@ -591,28 +582,19 @@ pub fn get_sealed_status<S: ReadonlyStorage>(
 //       value == true means it is hidden, value == false OR no record in storage means not hidden
 //
 
-pub fn hide_fardel<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-) -> StdResult <()> {
+pub fn hide_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_HIDDEN, store);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &true)
 }
 
-pub fn unhide_fardel<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-) -> StdResult <()> {
+pub fn unhide_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_HIDDEN, store);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &false)
 }
 
 // get hidden status of a given fardel
 //  true means hidden, false means not hidden
-pub fn is_fardel_hidden<S: ReadonlyStorage>(
-    store: &S, 
-    fardel_id: u128,
-) -> bool {
+pub fn is_fardel_hidden<S: ReadonlyStorage>(store: &S, fardel_id: u128) -> bool {
     let store = ReadonlyPrefixedStorage::new(PREFIX_HIDDEN, store);
     get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
 }
@@ -622,20 +604,13 @@ pub fn is_fardel_hidden<S: ReadonlyStorage>(
 //
 
 // stores a thumbnail img for fardel in prefixed storage
-pub fn store_fardel_img<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-    img: Vec<u8>,
-) -> StdResult<()> {
+pub fn store_fardel_img<S: Storage>(store: &mut S, fardel_id: u128, img: Vec<u8>) -> StdResult<()> {
     let mut storage = PrefixedStorage::new(PREFIX_FARDEL_THUMBNAIL_IMGS, store);
     set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &img)
 }
 
 // gets a thumbnail img for fardel in prefixed storage
-pub fn get_fardel_img<S: ReadonlyStorage>(
-    store: &S,
-    fardel_id: u128,
-) -> String {
+pub fn get_fardel_img<S: ReadonlyStorage>(store: &S, fardel_id: u128) -> String {
     let storage = ReadonlyPrefixedStorage::new(PREFIX_FARDEL_THUMBNAIL_IMGS, store);
     let img_vec = get_bin_data(&storage, &fardel_id.to_be_bytes()).unwrap_or_else(|_| vec![]);
     String::from_utf8(img_vec).unwrap()
@@ -643,6 +618,8 @@ pub fn get_fardel_img<S: ReadonlyStorage>(
 
 //
 // User accounts
+//   b"account" | {owner canonical addr} -> StoredAccount
+//   b"account-img" | {owner canonical addr} -> img
 //
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -682,8 +659,12 @@ impl StoredAccount {
             owner: api.human_address(&self.owner)?,
             handle: String::from_utf8(self.handle).ok().unwrap_or_default(),
             description: String::from_utf8(self.description).ok().unwrap_or_default(),
-            view_settings: String::from_utf8(self.view_settings).ok().unwrap_or_default(),
-            private_settings: String::from_utf8(self.private_settings).ok().unwrap_or_default(),
+            view_settings: String::from_utf8(self.view_settings)
+                .ok()
+                .unwrap_or_default(),
+            private_settings: String::from_utf8(self.private_settings)
+                .ok()
+                .unwrap_or_default(),
         };
         Ok(account)
     }
@@ -711,8 +692,8 @@ pub fn get_account<S: ReadonlyStorage>(
 //
 
 pub fn map_handle_to_account<S: Storage>(
-    store: &mut S, 
-    owner: &CanonicalAddr, 
+    store: &mut S,
+    owner: &CanonicalAddr,
     handle: String,
 ) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_HANDLES, store);
@@ -720,17 +701,14 @@ pub fn map_handle_to_account<S: Storage>(
 }
 
 // this is meant to be called after handle has been changed in account
-pub fn delete_handle_map<S: Storage>(
-    store: &mut S,
-    handle: String,
-) {
+pub fn delete_handle_map<S: Storage>(store: &mut S, handle: String) {
     let mut store = PrefixedStorage::new(PREFIX_HANDLES, store);
     store.remove(handle.as_bytes())
 }
 
 pub fn get_account_for_handle<S: ReadonlyStorage>(
-    store: &S, 
-    handle: &String
+    store: &S,
+    handle: &String,
 ) -> StdResult<CanonicalAddr> {
     let store = ReadonlyPrefixedStorage::new(PREFIX_HANDLES, store);
     get_bin_data(&store, handle.as_bytes())
@@ -751,10 +729,7 @@ pub fn store_account_img<S: Storage>(
 }
 
 // gets a thumbnail img for account in prefixed storage
-pub fn get_account_img<S: ReadonlyStorage>(
-    store: &S,
-    owner: &CanonicalAddr,
-) -> StdResult<Vec<u8>> {
+pub fn get_account_img<S: ReadonlyStorage>(store: &S, owner: &CanonicalAddr) -> StdResult<Vec<u8>> {
     let store = ReadonlyPrefixedStorage::new(PREFIX_ACCOUNT_THUMBNAIL_IMGS, store);
     get_bin_data(&store, &owner.as_slice())
 }
@@ -786,16 +761,14 @@ pub fn store_account_deactivated<S: Storage>(
 }
 
 // returns true is account is deactivated
-pub fn is_deactivated<S: ReadonlyStorage>(
-    store: &S,
-    account: &CanonicalAddr,
-) -> bool {
+pub fn is_deactivated<S: ReadonlyStorage>(store: &S, account: &CanonicalAddr) -> bool {
     let store = ReadonlyPrefixedStorage::new(PREFIX_DEACTIVATED, store);
     get_bin_data(&store, &account.as_slice()).unwrap_or_else(|_| false)
 }
 
 //
 // Banned accounts
+//   b"banned" | {owner canonical addr} -> bool
 //
 
 pub fn store_account_ban<S: Storage>(
@@ -808,12 +781,59 @@ pub fn store_account_ban<S: Storage>(
 }
 
 // returns true is account is banned
-pub fn is_banned<S: ReadonlyStorage>(
-    storage: &S,
-    account: &CanonicalAddr,
-) -> bool {
+pub fn is_banned<S: ReadonlyStorage>(storage: &S, account: &CanonicalAddr) -> bool {
     let storage = ReadonlyPrefixedStorage::new(PREFIX_BANNED, storage);
     get_bin_data(&storage, &account.as_slice()).unwrap_or_else(|_| false)
+}
+
+//
+// Address append store (for admin to iterate over users for indexing)
+//   b"addresses" |  {appendstore idx} -> owner canonical address
+//
+
+pub fn address_list_add<S: Storage>(storage: &mut S, address: &CanonicalAddr) -> StdResult<u32> {
+    let mut storage = PrefixedStorage::new(PREFIX_REGISTERED_ADDRESSES, storage);
+    let mut storage = AppendStoreMut::<CanonicalAddr, _>::attach_or_create(&mut storage)?;
+    storage.push(address)?;
+    Ok(storage.len())
+}
+
+pub fn get_registered_addresses<S: ReadonlyStorage>(
+    storage: &S,
+    start: u32,
+    count: u32,
+) -> StdResult<Vec<CanonicalAddr>> {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_REGISTERED_ADDRESSES, storage);
+
+    // Try to access the storage of addresses using contract
+    // If it doesn't exist yet, return an empty list.
+    let storage = if let Some(result) = AppendStore::<CanonicalAddr, _>::attach(&storage) {
+        result?
+    } else {
+        return Ok(vec![]);
+    };
+
+    // Take `count` addresses starting from the `start` address
+    // addresses from the start.
+    let address_iter = storage.iter().skip(start as _).take(count as _);
+    // Convert to HumanAddr
+    let addresses: StdResult<Vec<CanonicalAddr>> = address_iter.map(|address| address).collect();
+    addresses
+}
+
+pub fn get_total_number_registered_accounts<S: ReadonlyStorage>(
+    storage: &S,
+) -> StdResult<u32> {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_REGISTERED_ADDRESSES, storage);
+
+    // Try to access the storage of addresses using contract
+    // If it doesn't exist yet, return 0.
+    let storage = if let Some(result) = AppendStore::<CanonicalAddr, _>::attach(&storage) {
+        result?
+    } else {
+        return Ok(0_u32);
+    };
+    Ok(storage.len())
 }
 
 //
@@ -859,11 +879,17 @@ pub fn is_following<S: ReadonlyStorage>(
     owner: &CanonicalAddr,
     followed_addr: &CanonicalAddr,
 ) -> bool {
-    let link_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    let link_storage = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK],
+        storage,
+    );
     let result: StdResult<u32> = get_bin_data(&link_storage, &followed_addr.as_slice());
     match result {
         Ok(index) => {
-            let vec_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+            let vec_storage = ReadonlyPrefixedStorage::multilevel(
+                &[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC],
+                storage,
+            );
             if let Some(vec_store_result) = AppendStore::<Following, _>::attach(&vec_storage) {
                 let following = vec_store_result.unwrap().get_at(index);
                 match following {
@@ -873,7 +899,7 @@ pub fn is_following<S: ReadonlyStorage>(
             } else {
                 return false;
             };
-        },
+        }
         Err(_) => false,
     }
 }
@@ -886,14 +912,19 @@ fn save_following_relation<S: Storage>(
     // save following relation
 
     // get length of following appendstore
-    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage =
+        PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
     let vec_storage = AppendStoreMut::<Following, _>::attach_or_create(&mut vec_storage)?;
     let vec_storage_len = vec_storage.len();
 
-    let link_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    let link_storage = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK],
+        storage,
+    );
 
     // get current idx or add to end
-    let idx: u32 = get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage_len);
+    let idx: u32 =
+        get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage_len);
     // prepare following relationship
     let following = Following {
         who: followed_addr.clone(),
@@ -902,16 +933,18 @@ fn save_following_relation<S: Storage>(
 
     // now store the following relation
 
-    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage =
+        PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
     let mut vec_storage = AppendStoreMut::<Following, _>::attach_or_create(&mut vec_storage)?;
-    
+
     if idx == vec_storage_len {
         vec_storage.push(&following)?;
     } else {
         vec_storage.set_at(idx, &following)?;
     }
 
-    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    let mut link_storage =
+        PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
     if idx == vec_storage_len {
         set_bin_data(&mut link_storage, followed_addr.as_slice(), &idx)?;
     }
@@ -924,31 +957,44 @@ fn save_follower_relation<S: Storage>(
     followed_addr: &CanonicalAddr,
 ) -> StdResult<()> {
     // save follower relation
-    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage = PrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC],
+        storage,
+    );
     let vec_storage = AppendStoreMut::<Follower, _>::attach_or_create(&mut vec_storage)?;
     let vec_storage_len = vec_storage.len();
-    
-    let link_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_LINK], storage);
-     
-    let idx: u32 = get_bin_data(&link_storage, owner.as_slice()).unwrap_or_else(|_| vec_storage_len);
+
+    let link_storage = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_LINK],
+        storage,
+    );
+
+    let idx: u32 =
+        get_bin_data(&link_storage, owner.as_slice()).unwrap_or_else(|_| vec_storage_len);
     let follower = Follower {
         who: owner.clone(),
         active: true,
     };
 
-    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage = PrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC],
+        storage,
+    );
     let mut vec_storage = AppendStoreMut::<Follower, _>::attach_or_create(&mut vec_storage)?;
     if idx == vec_storage_len {
         vec_storage.push(&follower)?;
     } else {
         vec_storage.set_at(idx, &follower)?;
     }
-    
-    let mut link_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_LINK], storage);
+
+    let mut link_storage = PrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_LINK],
+        storage,
+    );
     if idx == vec_storage_len {
         set_bin_data(&mut link_storage, owner.as_slice(), &idx)?;
     }
-    
+
     Ok(())
 }
 
@@ -971,24 +1017,30 @@ fn delete_following_relation<S: Storage>(
     owner: &CanonicalAddr,
     followed_addr: &CanonicalAddr,
 ) -> StdResult<()> {
-    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage =
+        PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
     let vec_storage = AppendStoreMut::<Following, _>::attach_or_create(&mut vec_storage)?;
     let vec_storage_len = vec_storage.len();
 
-    let link_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK], storage);
+    let link_storage = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_LINK],
+        storage,
+    );
     // update following relation, active = false
 
     // get current idx and set to false or ignore if not following
-    let idx: u32 = get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage_len);
+    let idx: u32 =
+        get_bin_data(&link_storage, followed_addr.as_slice()).unwrap_or_else(|_| vec_storage_len);
 
-    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage =
+        PrefixedStorage::multilevel(&[PREFIX_FOLLOWING, &owner.as_slice(), PREFIX_VEC], storage);
     let mut vec_storage = AppendStoreMut::<Following, _>::attach_or_create(&mut vec_storage)?;
 
     if idx < vec_storage_len {
         let mut following: Following = vec_storage.get_at(idx)?;
         following.active = false;
         vec_storage.set_at(idx, &following)?;
-    } 
+    }
 
     Ok(())
 }
@@ -998,33 +1050,46 @@ fn delete_follower_relation<S: Storage>(
     owner: &CanonicalAddr,
     followed_addr: &CanonicalAddr,
 ) -> StdResult<()> {
-    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage = PrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC],
+        storage,
+    );
     let vec_storage = AppendStoreMut::<Follower, _>::attach_or_create(&mut vec_storage)?;
     let vec_storage_len = vec_storage.len();
 
-    let link_storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_LINK], storage);
-    let idx: u32 = get_bin_data(&link_storage, owner.as_slice()).unwrap_or_else(|_| vec_storage_len);
+    let link_storage = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_LINK],
+        storage,
+    );
+    let idx: u32 =
+        get_bin_data(&link_storage, owner.as_slice()).unwrap_or_else(|_| vec_storage_len);
 
-    let mut vec_storage = PrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC], storage);
+    let mut vec_storage = PrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, &followed_addr.as_slice(), PREFIX_VEC],
+        storage,
+    );
     let mut vec_storage = AppendStoreMut::<Follower, _>::attach_or_create(&mut vec_storage)?;
 
     if idx < vec_storage_len {
         let mut follower: Follower = vec_storage.get_at(idx)?;
         follower.active = false;
         vec_storage.set_at(idx, &follower)?;
-    } 
+    }
     Ok(())
 }
 
 // returns a vec of handles
-pub fn get_following<A:Api, S: Storage>(
+pub fn get_following<A: Api, S: Storage>(
     api: &A,
     storage: &S,
     owner: &CanonicalAddr,
     page: u32,
     page_size: u32,
-) -> StdResult<Vec<String>>{
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, owner.as_slice(), PREFIX_VEC], storage);
+) -> StdResult<Vec<String>> {
+    let store = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWING, owner.as_slice(), PREFIX_VEC],
+        storage,
+    );
 
     // Try to access the storage of following for the account.
     // If it doesn't exist yet, return an empty list.
@@ -1043,20 +1108,24 @@ pub fn get_following<A:Api, S: Storage>(
         .take(page_size as _);
     let result = following_iter
         .filter(|following| following.clone().as_ref().unwrap().active)
-        .map(|following| { 
+        .map(|following| {
             let followed = following.unwrap().who;
-            let followed_account: Account = get_account(storage, &followed).unwrap().into_humanized(api).unwrap();
+            let followed_account: Account = get_account(storage, &followed)
+                .unwrap()
+                .into_humanized(api)
+                .unwrap();
             followed_account.handle
-        }).collect();
+        })
+        .collect();
     Ok(result)
 }
 
 // returns number following including non-active -- for pagination
-pub fn get_number_of_following<S: ReadonlyStorage>(
-    storage: &S,
-    owner: &CanonicalAddr,
-) -> u32 {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWING, owner.as_slice(), PREFIX_VEC], storage);
+pub fn get_number_of_following<S: ReadonlyStorage>(storage: &S, owner: &CanonicalAddr) -> u32 {
+    let store = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWING, owner.as_slice(), PREFIX_VEC],
+        storage,
+    );
 
     // Try to access the storage of following for the account.
     // If it doesn't exist yet, return 0.
@@ -1067,14 +1136,17 @@ pub fn get_number_of_following<S: ReadonlyStorage>(
     };
 }
 
-pub fn get_followers<A:Api, S: Storage>(
+pub fn get_followers<A: Api, S: Storage>(
     api: &A,
     storage: &S,
     owner: &CanonicalAddr,
     page: u32,
     page_size: u32,
-) -> StdResult<Vec<String>>{
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, owner.as_slice(), PREFIX_VEC], storage);
+) -> StdResult<Vec<String>> {
+    let store = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, owner.as_slice(), PREFIX_VEC],
+        storage,
+    );
 
     // Try to access the storage of followers for the account.
     // If it doesn't exist yet, return an empty list.
@@ -1093,11 +1165,15 @@ pub fn get_followers<A:Api, S: Storage>(
         .take(page_size as _);
     let result = follower_iter
         .filter(|follower| follower.clone().as_ref().unwrap().active)
-        .map(|follower| { 
+        .map(|follower| {
             let follower = follower.unwrap().who;
-            let follower_account: Account = get_account(storage, &follower).unwrap().into_humanized(api).unwrap();
+            let follower_account: Account = get_account(storage, &follower)
+                .unwrap()
+                .into_humanized(api)
+                .unwrap();
             follower_account.handle
-        }).collect();
+        })
+        .collect();
     Ok(result)
 }
 
@@ -1111,10 +1187,7 @@ pub fn set_follower_count<S: Storage>(
 }
 
 // number of active followers
-pub fn get_follower_count<S: ReadonlyStorage>(
-    storage: &S,
-    account: &CanonicalAddr,
-) -> u32 {
+pub fn get_follower_count<S: ReadonlyStorage>(storage: &S, account: &CanonicalAddr) -> u32 {
     let storage = ReadonlyPrefixedStorage::new(PREFIX_FOLLOWER_COUNT, storage);
     get_bin_data(&storage, account.as_slice()).unwrap_or_else(|_| 0_u32)
 }
@@ -1123,12 +1196,11 @@ pub fn increment_follower_count<S: Storage>(
     storage: &mut S,
     account: &CanonicalAddr,
 ) -> Option<u32> {
-    let mut storage = PrefixedStorage::new(PREFIX_FOLLOWER_COUNT, storage);
-    let follower_count = get_follower_count(&storage, &account);
-    let result = set_follower_count(&mut storage, &account, follower_count + 1);
+    let follower_count = get_follower_count(storage, &account);
+    let result = set_follower_count(storage, &account, follower_count + 1);
     match result {
         Ok(_) => Some(follower_count + 1),
-        Err(_) => None
+        Err(_) => None,
     }
 }
 
@@ -1136,24 +1208,23 @@ pub fn decrement_follower_count<S: Storage>(
     storage: &mut S,
     account: &CanonicalAddr,
 ) -> Option<u32> {
-    let mut storage = PrefixedStorage::new(PREFIX_FOLLOWER_COUNT, storage);
-    let follower_count = get_follower_count(&storage, &account);
+    let follower_count = get_follower_count(storage, &account);
     if follower_count < 1 {
         return None;
     }
-    let result = set_follower_count(&mut storage, &account, follower_count - 1);
+    let result = set_follower_count(storage, &account, follower_count - 1);
     match result {
         Ok(_) => Some(follower_count - 1),
-        Err(_) => None
+        Err(_) => None,
     }
 }
 
 // returns number followers including non-active -- for pagination
-pub fn get_number_of_followers<S: ReadonlyStorage>(
-    storage: &S,
-    owner: &CanonicalAddr,
-) -> u32 {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_FOLLOWERS, owner.as_slice(), PREFIX_VEC], storage);
+pub fn get_number_of_followers<S: ReadonlyStorage>(storage: &S, owner: &CanonicalAddr) -> u32 {
+    let store = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_FOLLOWERS, owner.as_slice(), PREFIX_VEC],
+        storage,
+    );
 
     // Try to access the storage of followers for the account.
     // If it doesn't exist yet, return 0.
@@ -1177,7 +1248,8 @@ pub fn store_account_block<S: Storage>(
     blocked_addr: &CanonicalAddr,
     blocked: bool,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_BLOCKED, blocker_addr.as_slice()], storage);
+    let mut store =
+        PrefixedStorage::multilevel(&[PREFIX_BLOCKED, blocker_addr.as_slice()], storage);
     set_bin_data(&mut store, &blocked_addr.as_slice(), &blocked)
 }
 
@@ -1187,14 +1259,15 @@ pub fn is_blocked_by<S: ReadonlyStorage>(
     blocker_addr: &CanonicalAddr,
     blocked_addr: &CanonicalAddr,
 ) -> bool {
-    let storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_BLOCKED, blocker_addr.as_slice()], storage);
+    let storage =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_BLOCKED, blocker_addr.as_slice()], storage);
     get_bin_data(&storage, &blocked_addr.as_slice()).unwrap_or_else(|_| false)
 }
 
 //
 // Unpacked fardels
 //
-// are stored using multilevel prefixed + appendstore keys: 
+// are stored using multilevel prefixed + appendstore keys:
 //    b"unpacked" | {unpacker canonical addr} | {appendstore index} -> global fardel id
 //
 //  plus an additional mapping is stored to allow getting unpacked status and package_idx by global_id:
@@ -1217,55 +1290,62 @@ pub fn store_unpack<S: Storage>(
     unpacker: &CanonicalAddr,
     fardel_id: u128,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
-    let mut store = AppendStoreMut::<u128, _>::attach_or_create(&mut store)?;
-    
-    //let unpacked_fardel = UnpackedFardel {
-    //    fardel_id,
-    //};
-    store.push(&fardel_id)?;
-    let unpacked_status = UnpackedStatus {
-        unpacked: true,
-    };
+    push_unpack(storage, unpacker, fardel_id)?;
+    let unpacked_status = UnpackedStatus { unpacked: true };
     map_global_id_to_unpacked_by_unpacker(storage, fardel_id, unpacker, unpacked_status)
+}
+
+fn push_unpack<S: Storage>(
+    storage: &mut S,
+    unpacker: &CanonicalAddr,
+    fardel_id: u128,
+) -> StdResult<()> {
+    let mut storage = PrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
+    let mut storage = AppendStoreMut::<UnpackedFardel, _>::attach_or_create(&mut storage)?;
+
+    let unpacked_fardel = UnpackedFardel { fardel_id };
+    storage.push(&unpacked_fardel)
 }
 
 // stores a mapping from global fardel id to unpacked status in prefixed storage
 fn map_global_id_to_unpacked_by_unpacker<S: Storage>(
-    store: &mut S,
+    storage: &mut S,
     global_id: u128,
     unpacker: &CanonicalAddr,
     value: UnpackedStatus,
 ) -> StdResult<()> {
-    let mut storage = PrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], store);
+    let mut storage =
+        PrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], storage);
     set_bin_data(&mut storage, &global_id.to_be_bytes(), &value)
 }
 
-
 // get the unpacked status of a fardel for a given unpacker canonical address
-pub fn get_unpacked_status_by_fardel_id<S: Storage>(
-    storage: &S, 
+pub fn get_unpacked_status_by_fardel_id<S: ReadonlyStorage>(
+    storage: &S,
     unpacker: &CanonicalAddr,
     fardel_id: u128,
 ) -> UnpackedStatus {
-    let mapping_store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()], storage);
-    get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| UnpackedStatus{
-        unpacked: false,
-    })
+    let mapping_store = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_ID_UNPACKED_MAPPINGS, unpacker.as_slice()],
+        storage,
+    );
+    get_bin_data(&mapping_store, &fardel_id.to_be_bytes())
+        .unwrap_or_else(|_| UnpackedStatus { unpacked: false })
 }
 
 // gets a list of unpacked fardels for a given unpacker canonical address
-pub fn get_unpacked_by_unpacker<S: Storage>(
-    storage: &S, 
+pub fn get_unpacked_by_unpacker<S: ReadonlyStorage>(
+    storage: &S,
     unpacker: &CanonicalAddr,
     page: u32,
     page_size: u32,
-) -> StdResult<Vec<u128>> {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
+) -> StdResult<Vec<UnpackedFardel>> {
+    let storage =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
 
     // Try to access the storage of unpacked for the account.
     // If it doesn't exist yet, return an empty list.
-    let store = if let Some(result) = AppendStore::<u128, _>::attach(&store) {
+    let storage = if let Some(result) = AppendStore::<UnpackedFardel, _>::attach(&storage) {
         result?
     } else {
         return Ok(vec![]);
@@ -1273,28 +1353,29 @@ pub fn get_unpacked_by_unpacker<S: Storage>(
 
     // Take `page_size` unpacked starting from the latest unpacked, potentially skipping `page * page_size`
     // unpacked from the start.
-    let unpacked_iter = store
+    let unpacked_iter = storage
         .iter()
         .rev()
         .skip((page * page_size) as _)
         .take(page_size as _);
-    // The `and_then` here flattens the `StdResult<StdResult<u128>>` to an `StdResult<u128>`
-    let unpacked: StdResult<Vec<u128>> = unpacked_iter
-        .map(|fardel_id| fardel_id)
+
+    let unpacked: StdResult<Vec<UnpackedFardel>> = unpacked_iter
+        .map(|unpacked_fardel| unpacked_fardel)
         .collect();
     unpacked
 }
 
 // gets number of unpacked fardels for a given unpacker canonical address
-pub fn get_number_of_unpacked_by_unpacker<S: Storage>(
-    storage: &S, 
+pub fn get_number_of_unpacked_by_unpacker<S: ReadonlyStorage>(
+    storage: &S,
     unpacker: &CanonicalAddr,
 ) -> u32 {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
+    let storage =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_UNPACKED, unpacker.as_slice()], storage);
 
     // Try to access the storage of unpacked for the account.
     // If it doesn't exist yet, return an empty list.
-    if let Some(result) = AppendStore::<u128, _>::attach(&store) {
+    if let Some(result) = AppendStore::<UnpackedFardel, _>::attach(&storage) {
         return result.unwrap().len();
     } else {
         return 0_u32;
@@ -1330,10 +1411,7 @@ pub fn set_pending_start<S: Storage>(
     set_bin_data(&mut storage, owner.as_slice(), &idx)
 }
 
-pub fn get_pending_start<S: ReadonlyStorage>(
-    storage: &S,
-    owner: &CanonicalAddr,
-) -> u32 {
+pub fn get_pending_start<S: ReadonlyStorage>(storage: &S, owner: &CanonicalAddr) -> u32 {
     let storage = ReadonlyPrefixedStorage::new(PREFIX_PENDING_START, storage);
     get_bin_data(&storage, owner.as_slice()).unwrap_or_else(|_| 0_u32)
 }
@@ -1346,9 +1424,10 @@ pub fn store_pending_unpack<S: Storage>(
     sent_funds: Coin,
     timestamp: u64,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
+    let mut store =
+        PrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
     let mut store = AppendStoreMut::<PendingUnpackApproval, _>::attach_or_create(&mut store)?;
-    
+
     let pending_unpack = PendingUnpackApproval {
         fardel_id,
         unpacker: unpacker.clone(),
@@ -1358,7 +1437,13 @@ pub fn store_pending_unpack<S: Storage>(
     };
     store.push(&pending_unpack)?;
     let pending_unpack_idx = store.len() - 1;
-    map_global_id_to_pending_unpacked_by_unpacker(storage, fardel_id, unpacker, pending_unpack_idx, true)
+    map_global_id_to_pending_unpacked_by_unpacker(
+        storage,
+        fardel_id,
+        unpacker,
+        pending_unpack_idx,
+        true,
+    )
 }
 
 // gets an individual pending unpack approval for a given owner canonical address
@@ -1367,7 +1452,8 @@ pub fn get_pending_unpack_approval<S: ReadonlyStorage>(
     owner: &CanonicalAddr,
     idx: u32,
 ) -> StdResult<PendingUnpackApproval> {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
+    let store =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
     // Try to access the storage of pending unpacks for the account.
     // If it doesn't exist yet, return an empty list.
     let store = if let Some(result) = AppendStore::<PendingUnpackApproval, _>::attach(&store) {
@@ -1380,12 +1466,13 @@ pub fn get_pending_unpack_approval<S: ReadonlyStorage>(
 
 // gets a list of pending unpack approvals for a given owner canonical address
 pub fn get_pending_approvals_from_start<S: ReadonlyStorage>(
-    storage: &S, 
+    storage: &S,
     owner: &CanonicalAddr,
     number: u32,
 ) -> StdResult<Vec<PendingUnpackApproval>> {
     let start = get_pending_start(storage, owner);
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
+    let store =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
 
     // Try to access the storage of unpacked for the account.
     // If it doesn't exist yet, return an empty list.
@@ -1397,13 +1484,9 @@ pub fn get_pending_approvals_from_start<S: ReadonlyStorage>(
 
     // Take `number` unpacked starting from the latest unpacked, potentially skipping `start`
     // unpacked from the start.
-    let unpacked_iter = store
-        .iter()
-        .skip(start as _)
-        .take(number as _);
-    let unpacked: StdResult<Vec<PendingUnpackApproval>> = unpacked_iter
-        .map(|pending_unpack| pending_unpack)
-        .collect();
+    let unpacked_iter = store.iter().skip(start as _).take(number as _);
+    let unpacked: StdResult<Vec<PendingUnpackApproval>> =
+        unpacked_iter.map(|pending_unpack| pending_unpack).collect();
     unpacked
 }
 
@@ -1421,7 +1504,10 @@ fn map_global_id_to_pending_unpacked_by_unpacker<S: Storage>(
     pending_unpack_idx: u32,
     value: bool,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_ID_PENDING_UNPACKED_MAPPINGS, unpacker.as_slice()], store);
+    let mut store = PrefixedStorage::multilevel(
+        &[PREFIX_ID_PENDING_UNPACKED_MAPPINGS, unpacker.as_slice()],
+        store,
+    );
     let my_pending_unpack = MyPendingUnpack {
         pending_unpack_idx,
         value,
@@ -1430,12 +1516,15 @@ fn map_global_id_to_pending_unpacked_by_unpacker<S: Storage>(
 }
 
 // get the pending unpacked status of a fardel for a given unpacker canonical address
-pub fn get_pending_unpacked_status_by_fardel_id<S: Storage>(
-    storage: &S, 
+pub fn get_pending_unpacked_status_by_fardel_id<S: ReadonlyStorage>(
+    storage: &S,
     unpacker: &CanonicalAddr,
     fardel_id: u128,
 ) -> MyPendingUnpack {
-    let mapping_store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_ID_PENDING_UNPACKED_MAPPINGS, unpacker.as_slice()], storage);
+    let mapping_store = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_ID_PENDING_UNPACKED_MAPPINGS, unpacker.as_slice()],
+        storage,
+    );
     get_bin_data(&mapping_store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| MyPendingUnpack {
         pending_unpack_idx: 0,
         value: false,
@@ -1450,15 +1539,28 @@ pub fn cancel_pending_unpack<S: Storage>(
 ) -> StdResult<()> {
     let my_pending_unpack = get_pending_unpacked_status_by_fardel_id(storage, &unpacker, fardel_id);
     if my_pending_unpack.value {
-        let mut pending_unpack_approval = get_pending_unpack_approval(storage, &owner, my_pending_unpack.pending_unpack_idx)?;
+        let mut pending_unpack_approval =
+            get_pending_unpack_approval(storage, &owner, my_pending_unpack.pending_unpack_idx)?;
         pending_unpack_approval.canceled = true;
-        let mut store = PrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
+        let mut store =
+            PrefixedStorage::multilevel(&[PREFIX_PENDING_APPROVAL, owner.as_slice()], storage);
         let mut store = AppendStoreMut::<PendingUnpackApproval, _>::attach_or_create(&mut store)?;
         // update element to canceled
-        store.set_at(my_pending_unpack.pending_unpack_idx, &pending_unpack_approval)?;
-        map_global_id_to_pending_unpacked_by_unpacker(storage, fardel_id, unpacker, my_pending_unpack.pending_unpack_idx, false)
+        store.set_at(
+            my_pending_unpack.pending_unpack_idx,
+            &pending_unpack_approval,
+        )?;
+        map_global_id_to_pending_unpacked_by_unpacker(
+            storage,
+            fardel_id,
+            unpacker,
+            my_pending_unpack.pending_unpack_idx,
+            false,
+        )
     } else {
-        return Err(StdError::generic_err("Cannot cancel unpack that is not pending."));
+        return Err(StdError::generic_err(
+            "Cannot cancel unpack that is not pending.",
+        ));
     }
 }
 
@@ -1476,7 +1578,7 @@ pub fn cancel_pending_unpack<S: Storage>(
 // Downvotes are stored using prefixed storage:
 //    b"downvotes" | {fardel_id} -> downvote count
 //
-// Comments are stored using multilevel prefixed + appendstore keys: 
+// Comments are stored using multilevel prefixed + appendstore keys:
 //    b"comments" | {fardel id} | {appendstore index} -> Comment
 //
 pub fn set_rated<S: Storage>(
@@ -1489,11 +1591,7 @@ pub fn set_rated<S: Storage>(
     set_bin_data(&mut storage, &fardel_id.to_be_bytes(), &rating)
 }
 
-pub fn has_rated<S: ReadonlyStorage>(
-    storage: &S,
-    rater: &CanonicalAddr,
-    fardel_id: u128,
-) -> bool {
+pub fn has_rated<S: ReadonlyStorage>(storage: &S, rater: &CanonicalAddr, fardel_id: u128) -> bool {
     let storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_RATED, rater.as_slice()], storage);
     let result: StdResult<bool> = get_bin_data(&storage, &fardel_id.to_be_bytes());
     match result {
@@ -1502,11 +1600,7 @@ pub fn has_rated<S: ReadonlyStorage>(
     }
 }
 
-pub fn remove_rated<S: Storage>(
-    storage: &mut S,
-    rater: &CanonicalAddr,
-    fardel_id: u128,
-) {
+pub fn remove_rated<S: Storage>(storage: &mut S, rater: &CanonicalAddr, fardel_id: u128) {
     let mut storage = PrefixedStorage::multilevel(&[PREFIX_RATED, rater.as_slice()], storage);
     storage.remove(&fardel_id.to_be_bytes())
 }
@@ -1520,54 +1614,36 @@ pub fn get_rating<S: ReadonlyStorage>(
     get_bin_data(&storage, &fardel_id.to_be_bytes())
 }
 
-pub fn add_upvote_fardel<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-) -> StdResult <()> {
+pub fn add_upvote_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_UPVOTES, store);
     let upvotes: u32 = get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &(upvotes + 1))
 }
 
-pub fn subtract_upvote_fardel<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-) -> StdResult <()> {
+pub fn subtract_upvote_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_UPVOTES, store);
     let upvotes: u32 = get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &(upvotes - 1))
 }
 
-pub fn get_upvotes<S: Storage>(
-    store: &S,
-    fardel_id: u128,
-) -> u32 {
+pub fn get_upvotes<S: ReadonlyStorage>(store: &S, fardel_id: u128) -> u32 {
     let store = ReadonlyPrefixedStorage::new(PREFIX_UPVOTES, store);
     get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32)
 }
 
-pub fn add_downvote_fardel<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-) -> StdResult <()> {
+pub fn add_downvote_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_DOWNVOTES, store);
     let downvotes: u32 = get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &(downvotes + 1))
 }
 
-pub fn subtract_downvote_fardel<S: Storage>(
-    store: &mut S,
-    fardel_id: u128,
-) -> StdResult <()> {
+pub fn subtract_downvote_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
     let mut store = PrefixedStorage::new(PREFIX_DOWNVOTES, store);
     let downvotes: u32 = get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32);
     set_bin_data(&mut store, &fardel_id.to_be_bytes(), &(downvotes - 1))
 }
 
-pub fn get_downvotes<S: Storage>(
-    store: &S,
-    fardel_id: u128,
-) -> u32 {
+pub fn get_downvotes<S: ReadonlyStorage>(store: &S, fardel_id: u128) -> u32 {
     let store = ReadonlyPrefixedStorage::new(PREFIX_DOWNVOTES, store);
     get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| 0_u32)
 }
@@ -1591,7 +1667,8 @@ pub fn comment_on_fardel<S: Storage>(
     fardel_id: u128,
     text: String,
 ) -> StdResult<()> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
+    let mut store =
+        PrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
     let mut store = AppendStoreMut::<Comment, _>::attach_or_create(&mut store)?;
     let comment = Comment {
         commenter: commenter.clone(),
@@ -1608,7 +1685,8 @@ pub fn get_comments<S: ReadonlyStorage>(
     page_size: u32,
 ) -> StdResult<Vec<IndexedComment>> {
     let fardel_owner = get_fardel_owner(storage, fardel_id)?;
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
+    let store =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
 
     // Try to access the storage of comments for the fardel.
     // If it doesn't exist yet, return an empty list.
@@ -1629,13 +1707,11 @@ pub fn get_comments<S: ReadonlyStorage>(
     let comments: StdResult<Vec<IndexedComment>> = comments_iter
         .map(|(idx, comment)| {
             let comment = comment.unwrap();
-            Ok(
-                IndexedComment {
-                    commenter: comment.commenter.clone(),
-                    text: comment.text,
-                    idx: idx as u32,
-                }
-            )
+            Ok(IndexedComment {
+                commenter: comment.commenter.clone(),
+                text: comment.text,
+                idx: idx as u32,
+            })
         })
         .filter(|comment| {
             let comment = comment.as_ref().unwrap();
@@ -1650,11 +1726,9 @@ pub fn get_comments<S: ReadonlyStorage>(
 }
 
 // get total number of comments for a fardel
-pub fn get_number_of_comments<S: ReadonlyStorage>(
-    storage: &S,
-    fardel_id: u128,
-) -> u32 {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
+pub fn get_number_of_comments<S: ReadonlyStorage>(storage: &S, fardel_id: u128) -> u32 {
+    let store =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
 
     // Try to access the storage of comments for the fardel.
     // If it doesn't exist yet, return 0.
@@ -1675,13 +1749,16 @@ pub fn get_comment_by_id<S: ReadonlyStorage>(
     fardel_id: u128,
     comment_id: u32,
 ) -> StdResult<Comment> {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
+    let store =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_COMMENTS, &fardel_id.to_be_bytes()], storage);
     // Try to access the storage of comments for the fardel.
     // If it doesn't exist yet, return 0.
     let store = if let Some(result) = AppendStore::<Comment, _>::attach(&store) {
         result?
     } else {
-        return Err(StdError::generic_err("no comment at that index for that fardel."));
+        return Err(StdError::generic_err(
+            "no comment at that index for that fardel.",
+        ));
     };
     store.get_at(comment_id)
 }
@@ -1691,32 +1768,29 @@ pub fn delete_comment<S: Storage>(
     fardel_id: u128,
     comment_id: u32,
 ) -> StdResult<()> {
-    let mut storage = PrefixedStorage::multilevel(&[PREFIX_DELETED_COMMENTS, &fardel_id.to_be_bytes()], storage);
-    set_bin_data(&mut storage, &comment_id.to_be_bytes(), &true)    
+    let mut storage = PrefixedStorage::multilevel(
+        &[PREFIX_DELETED_COMMENTS, &fardel_id.to_be_bytes()],
+        storage,
+    );
+    set_bin_data(&mut storage, &comment_id.to_be_bytes(), &true)
 }
 
-fn comment_is_deleted<S: ReadonlyStorage>(
-    storage: &S,
-    fardel_id: u128,
-    comment_id: u32,
-) -> bool {
-    let storage = ReadonlyPrefixedStorage::multilevel(&[PREFIX_DELETED_COMMENTS, &fardel_id.to_be_bytes()], storage);
+fn comment_is_deleted<S: ReadonlyStorage>(storage: &S, fardel_id: u128, comment_id: u32) -> bool {
+    let storage = ReadonlyPrefixedStorage::multilevel(
+        &[PREFIX_DELETED_COMMENTS, &fardel_id.to_be_bytes()],
+        storage,
+    );
     get_bin_data(&storage, &comment_id.to_be_bytes()).unwrap_or_else(|_| false)
 }
 
 //
 // Commission balance
 //
-pub fn get_commission_balance<S: Storage>(
-    storage: &S,
-) -> u128 {
+pub fn get_commission_balance<S: ReadonlyStorage>(storage: &S) -> u128 {
     get_bin_data(storage, KEY_COMMISSION_BALANCE).unwrap_or_else(|_| 0_u128)
 }
 
-pub fn add_to_commission_balance<S: Storage>(
-    storage: &mut S,
-    amount: u128,
-) -> StdResult<()> {
+pub fn add_to_commission_balance<S: Storage>(storage: &mut S, amount: u128) -> StdResult<()> {
     let current_amount = get_commission_balance(storage);
     set_bin_data(storage, KEY_COMMISSION_BALANCE, &(current_amount + amount))
 }
@@ -1727,7 +1801,9 @@ pub fn subtract_from_commission_balance<S: Storage>(
 ) -> StdResult<()> {
     let current_amount = get_commission_balance(storage);
     if current_amount < amount {
-        return Err(StdError::generic_err("Cannot subtract more than current commission amount."));
+        return Err(StdError::generic_err(
+            "Cannot subtract more than current commission amount.",
+        ));
     }
     set_bin_data(storage, KEY_COMMISSION_BALANCE, &(current_amount - amount))
 }
@@ -1871,7 +1947,8 @@ pub fn append_purchase_tx<S: Storage>(
     fee: u128,
     timestamp: u64,
 ) -> StdResult<u32> {
-    let mut store = PrefixedStorage::multilevel(&[PREFIX_PURCHASE_TX, unpacker.as_slice()], storage);
+    let mut store =
+        PrefixedStorage::multilevel(&[PREFIX_PURCHASE_TX, unpacker.as_slice()], storage);
     let mut store = AppendStoreMut::<StoredPurchaseTx, _>::attach_or_create(&mut store)?;
     let tx = StoredPurchaseTx {
         fardel_id,
@@ -1890,7 +1967,8 @@ pub fn get_purchase_txs<S: ReadonlyStorage>(
     page: u32,
     page_size: u32,
 ) -> StdResult<Vec<PurchaseTx>> {
-    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PURCHASE_TX, unpacker.as_slice()], storage);
+    let store =
+        ReadonlyPrefixedStorage::multilevel(&[PREFIX_PURCHASE_TX, unpacker.as_slice()], storage);
 
     // Try to access the storage of txs for the account.
     // If it doesn't exist yet, return an empty list.

@@ -1,9 +1,7 @@
-use std::convert::TryFrom;
-use cosmwasm_std::{
-    StdError, StdResult,
-};
-use cosmwasm_std::{Uint128};
 use crate::msg::Fee;
+use cosmwasm_std::Uint128;
+use cosmwasm_std::{StdError, StdResult};
+use std::convert::TryFrom;
 
 pub const DEFAULT_TRANSACTION_FEE: Fee = Fee {
     commission_rate_nom: Uint128(3),
@@ -28,8 +26,8 @@ pub fn valid_transaction_fee(val: Option<Fee>) -> StdResult<Fee> {
             } else {
                 Ok(v)
             }
-        },
-        None => Ok(DEFAULT_TRANSACTION_FEE)
+        }
+        None => Ok(DEFAULT_TRANSACTION_FEE),
     }
 }
 
@@ -39,10 +37,11 @@ pub fn valid_max_query_page_size(val: Option<i32>) -> StdResult<u16> {
             if v < 1 {
                 Err(StdError::generic_err("invalid max_query_page_size"))
             } else {
-                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_query_page_size")))
+                u16::try_from(v)
+                    .or_else(|_| Err(StdError::generic_err("invalid max_query_page_size")))
             }
-        },
-        None => Ok(DEFAULT_MAX_QUERY_PAGE_SIZE)
+        }
+        None => Ok(DEFAULT_MAX_QUERY_PAGE_SIZE),
     }
 }
 
@@ -53,10 +52,11 @@ pub fn valid_max_public_message_len(val: Option<i32>) -> StdResult<u16> {
             if v < 1 {
                 Err(StdError::generic_err("invalid max_public_message_len"))
             } else {
-                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_public_message_len")))
+                u16::try_from(v)
+                    .or_else(|_| Err(StdError::generic_err("invalid max_public_message_len")))
             }
-        },
-        None => Ok(DEFAULT_MAX_PUBLIC_MESSAGE_LEN)
+        }
+        None => Ok(DEFAULT_MAX_PUBLIC_MESSAGE_LEN),
     }
 }
 
@@ -69,8 +69,8 @@ pub fn valid_max_tag_len(val: Option<i32>) -> StdResult<u8> {
             } else {
                 u8::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_tag_len")))
             }
-        },
-        None => Ok(DEFAULT_MAX_TAG_LEN)
+        }
+        None => Ok(DEFAULT_MAX_TAG_LEN),
     }
 }
 
@@ -81,20 +81,20 @@ pub fn valid_max_number_of_tags(val: Option<i32>) -> StdResult<u8> {
             if v < 1 {
                 Err(StdError::generic_err("invalid max_number_of_tags"))
             } else {
-                u8::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_number_of_tags")))
+                u8::try_from(v)
+                    .or_else(|_| Err(StdError::generic_err("invalid max_number_of_tags")))
             }
-        },
-        None => Ok(DEFAULT_MAX_NUMBER_OF_TAGS)
+        }
+        None => Ok(DEFAULT_MAX_NUMBER_OF_TAGS),
     }
 }
 
 // limit the max thumbnail img size in bytes to u32, default 64K
 pub fn valid_max_thumbnail_img_size(val: Option<i32>) -> StdResult<u32> {
     match val {
-        Some(v) => {
-            u32::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_thumbnail_img_size")))
-        },
-        None => Ok(DEFAULT_MAX_THUMBNAIL_IMG_SIZE)
+        Some(v) => u32::try_from(v)
+            .or_else(|_| Err(StdError::generic_err("invalid max_thumbnail_img_size"))),
+        None => Ok(DEFAULT_MAX_THUMBNAIL_IMG_SIZE),
     }
 }
 
@@ -105,10 +105,11 @@ pub fn valid_max_contents_data_len(val: Option<i32>) -> StdResult<u16> {
             if v < 1 {
                 Err(StdError::generic_err("invalid_max_contents_data_len"))
             } else {
-                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_contents_data_len")))
+                u16::try_from(v)
+                    .or_else(|_| Err(StdError::generic_err("invalid max_contents_data_len")))
             }
-        },
-        None => Ok(DEFAULT_MAX_CONTENTS_DATA_LEN)
+        }
+        None => Ok(DEFAULT_MAX_CONTENTS_DATA_LEN),
     }
 }
 
@@ -119,10 +120,11 @@ pub fn valid_max_handle_len(val: Option<i32>) -> StdResult<u16> {
             if v < 8 {
                 Err(StdError::generic_err("invalid_max_handle_length"))
             } else {
-                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_handle_length")))
+                u16::try_from(v)
+                    .or_else(|_| Err(StdError::generic_err("invalid max_handle_length")))
             }
-        },
-        None => Ok(DEFAULT_MAX_HANDLE_LEN)
+        }
+        None => Ok(DEFAULT_MAX_HANDLE_LEN),
     }
 }
 
@@ -133,10 +135,11 @@ pub fn valid_max_description_len(val: Option<i32>) -> StdResult<u16> {
             if v < 1 {
                 Err(StdError::generic_err("invalid_max_description_length"))
             } else {
-                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_description_length")))
+                u16::try_from(v)
+                    .or_else(|_| Err(StdError::generic_err("invalid max_description_length")))
             }
-        },
-        None => Ok(DEFAULT_MAX_DESCRIPTION_LEN)
+        }
+        None => Ok(DEFAULT_MAX_DESCRIPTION_LEN),
     }
 }
 
@@ -147,10 +150,11 @@ pub fn valid_max_view_settings_len(val: Option<i32>) -> StdResult<u16> {
             if v < 1 {
                 Err(StdError::generic_err("invalid_max_view_settings_length"))
             } else {
-                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_view_settings_length")))
+                u16::try_from(v)
+                    .or_else(|_| Err(StdError::generic_err("invalid max_view_settings_length")))
             }
-        },
-        None => Ok(DEFAULT_MAX_VIEW_SETTINGS_LEN)
+        }
+        None => Ok(DEFAULT_MAX_VIEW_SETTINGS_LEN),
     }
 }
 
@@ -161,20 +165,19 @@ pub fn valid_max_private_settings_len(val: Option<i32>) -> StdResult<u16> {
             if v < 1 {
                 Err(StdError::generic_err("invalid_max_private_settings_length"))
             } else {
-                u16::try_from(v).or_else(|_| Err(StdError::generic_err("invalid max_private_settings_length")))
+                u16::try_from(v)
+                    .or_else(|_| Err(StdError::generic_err("invalid max_private_settings_length")))
             }
-        },
-        None => Ok(DEFAULT_MAX_PRIVATE_SETTINGS_LEN)
+        }
+        None => Ok(DEFAULT_MAX_PRIVATE_SETTINGS_LEN),
     }
 }
 
 // check valid seal time for a fardel
 pub fn valid_seal_time(val: Option<i32>) -> StdResult<u64> {
     match val {
-        Some(v) => {
-            u64::try_from(v).or_else(|_| Err(StdError::generic_err("invalid seal_time")))
-        },
-        None => Ok(0_u64)
+        Some(v) => u64::try_from(v).or_else(|_| Err(StdError::generic_err("invalid seal_time"))),
+        None => Ok(0_u64),
     }
 }
 

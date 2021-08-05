@@ -1,12 +1,12 @@
 pub mod contract;
-pub mod msg;
-pub mod state;
 mod exec;
+pub mod msg;
 mod query;
+pub mod state;
+mod u256_math;
 mod utils;
 mod validation;
 mod viewing_key;
-mod u256_math;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {

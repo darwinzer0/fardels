@@ -1,62 +1,52 @@
-use std::convert::TryFrom;
-use cosmwasm_std::{
-    to_binary, Api, Coin, Env, Extern, HandleResponse, Querier, 
-    CosmosMsg, BankMsg, HumanAddr, CanonicalAddr,
-    StdError, StdResult, Storage, Uint128
-};
-use twox_hash::xxh3::hash128_with_seed;
-use primitive_types::U256;
-use crate::u256_math::*;
-use crate::msg::{
-    HandleAnswer, ResponseStatus, 
-    ResponseStatus::Success, ResponseStatus::Failure, Fee,
-};
-use crate::state::{Config, ReadonlyConfig,
-    set_frozen,
-    Account, get_account, get_account_for_handle, map_handle_to_account, delete_handle_map,
-    store_account, store_account_img, store_account_ban, store_account_block,
-    Fardel, get_fardel_by_hash, get_fardel_by_global_id, get_fardel_owner, seal_fardel, 
-    hide_fardel, unhide_fardel, store_fardel, 
-    store_pending_unpack,
-    get_global_id_by_hash, get_total_fardel_count, store_fardel_img, 
-    store_following, remove_following,
-    store_account_deactivated,
-    increment_fardel_unpack_count, decrement_fardel_unpack_count,
-    PendingUnpackApproval, cancel_pending_unpack, get_pending_unpacked_status_by_fardel_id,
-    get_unpacked_status_by_fardel_id, get_sealed_status, store_unpack, 
-    get_pending_approvals_from_start, get_pending_start, set_pending_start,
-    append_sale_tx, append_purchase_tx,
-    has_rated, set_rated, get_rating, remove_rated, 
-    subtract_upvote_fardel, subtract_downvote_fardel,
-    add_upvote_fardel, add_downvote_fardel, 
-    comment_on_fardel, delete_comment, get_comment_by_id,
-    write_viewing_key, get_commission_balance,
-    is_blocked_by, is_banned, is_deactivated,
-};
-use crate::validation::{
-    valid_max_public_message_len, valid_max_thumbnail_img_size, valid_max_contents_data_len, 
-    valid_max_handle_len, valid_max_tag_len, valid_max_number_of_tags,
-    valid_max_description_len, valid_max_query_page_size, valid_seal_time,
-    has_whitespace,
-};
-use crate::viewing_key::{ViewingKey};
 use crate::contract::DENOM;
+use crate::msg::{
+    Fee, HandleAnswer, ResponseStatus, ResponseStatus::Failure, ResponseStatus::Success,
+};
+use crate::state::{
+    add_downvote_fardel, add_upvote_fardel, append_purchase_tx, append_sale_tx,
+    cancel_pending_unpack, comment_on_fardel, decrement_fardel_unpack_count, delete_comment,
+    delete_handle_map, get_account, get_account_for_handle, get_comment_by_id,
+    get_commission_balance, get_fardel_by_global_id, get_fardel_by_hash, get_fardel_owner,
+    get_global_id_by_hash, get_pending_approvals_from_start, get_pending_start,
+    get_pending_unpacked_status_by_fardel_id, get_rating, get_sealed_status,
+    get_total_fardel_count, get_unpacked_status_by_fardel_id, has_rated, hide_fardel,
+    increment_fardel_unpack_count, is_banned, is_blocked_by, is_deactivated, map_handle_to_account,
+    remove_following, remove_rated, seal_fardel, set_frozen, set_pending_start, set_rated,
+    store_account, store_account_ban, store_account_block, store_account_deactivated,
+    store_account_img, store_fardel, store_fardel_img, store_following, store_pending_unpack,
+    store_unpack, subtract_downvote_fardel, subtract_upvote_fardel, unhide_fardel,
+    write_viewing_key, Account, Config, Fardel, PendingUnpackApproval, ReadonlyConfig,
+};
+use crate::u256_math::*;
+use crate::validation::{
+    has_whitespace, valid_max_contents_data_len, valid_max_description_len, valid_max_handle_len,
+    valid_max_number_of_tags, valid_max_public_message_len, valid_max_query_page_size,
+    valid_max_tag_len, valid_max_thumbnail_img_size, valid_seal_time,
+};
+use crate::viewing_key::ViewingKey;
+use cosmwasm_std::{
+    debug_print, to_binary, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
+    HandleResponse, HumanAddr, Querier, StdError, StdResult, Storage, Uint128,
+};
+use primitive_types::U256;
+use std::convert::TryFrom;
+use twox_hash::xxh3::hash128_with_seed;
 
 // admin-only functions
 
 pub fn try_set_constants<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    transaction_fee: Option<Fee>, 
-    max_query_page_size: Option<i32>, 
-    max_cost: Option<Uint128>, 
-    max_public_message_len: Option<i32>, 
-    max_tag_len: Option<i32>, 
+    transaction_fee: Option<Fee>,
+    max_query_page_size: Option<i32>,
+    max_cost: Option<Uint128>,
+    max_public_message_len: Option<i32>,
+    max_tag_len: Option<i32>,
     max_number_of_tags: Option<i32>,
-    max_fardel_img_size: Option<i32>, 
-    max_contents_data_len: Option<i32>, 
+    max_fardel_img_size: Option<i32>,
+    max_contents_data_len: Option<i32>,
     max_handle_len: Option<i32>,
-    max_profile_img_size: Option<i32>, 
+    max_profile_img_size: Option<i32>,
     max_description_len: Option<i32>,
 ) -> StdResult<HandleResponse> {
     let mut config = Config::from_storage(&mut deps.storage);
@@ -152,13 +142,17 @@ pub fn try_store_frozen_contract<S: Storage, A: Api, Q: Querier>(
         Ok(HandleResponse {
             messages: vec![],
             log: vec![],
-            data: Some(to_binary(&HandleAnswer::FreezeContract { status: Success })?),
+            data: Some(to_binary(&HandleAnswer::FreezeContract {
+                status: Success,
+            })?),
         })
     } else {
         Ok(HandleResponse {
             messages: vec![],
             log: vec![],
-            data: Some(to_binary(&HandleAnswer::UnfreezeContract { status: Success })?),
+            data: Some(to_binary(&HandleAnswer::UnfreezeContract {
+                status: Success,
+            })?),
         })
     }
 }
@@ -184,17 +178,14 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
     // check if address given first
     if address.is_some() {
         store_account_ban(
-            &mut deps.storage, 
-            &deps.api.canonical_address(&address.unwrap())?, 
-            banned
-        )?;
-    } else if handle.is_some() { // otherwise use handle
-        let account = get_account_for_handle(&deps.storage, &handle.unwrap())?;
-        store_account_ban(
             &mut deps.storage,
-            &account,
-            banned
+            &deps.api.canonical_address(&address.unwrap())?,
+            banned,
         )?;
+    } else if handle.is_some() {
+        // otherwise use handle
+        let account = get_account_for_handle(&deps.storage, &handle.unwrap())?;
+        store_account_ban(&mut deps.storage, &account, banned)?;
     } else {
         status = Failure;
         msg = Some(String::from("No handle or address given."));
@@ -255,7 +246,12 @@ pub fn try_draw_commission<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages,
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::DrawCommission { status, msg, amount: Uint128(amount), address: address.clone() })?),
+        data: Some(to_binary(&HandleAnswer::DrawCommission {
+            status,
+            msg,
+            amount: Uint128(amount),
+            address: address.clone(),
+        })?),
     })
 }
 
@@ -300,7 +296,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
             Ok(_) => {
                 status = Failure;
                 msg = Some(String::from("Handle is already in use."))
-            },
+            }
             Err(_) => {
                 let message_sender = deps.api.canonical_address(&env.message.sender)?;
 
@@ -313,8 +309,8 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                         if !handle.eq(&old_handle) {
                             delete_handle_map(&mut deps.storage, old_handle);
                         }
-                    },
-                    _ => { }
+                    }
+                    _ => {}
                 }
                 let stored_account = Account {
                     owner: env.message.sender.clone(),
@@ -322,30 +318,34 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                     description,
                     view_settings,
                     private_settings,
-                }.into_stored(&deps.api)?;
+                }
+                .into_stored(&deps.api)?;
                 map_handle_to_account(&mut deps.storage, &message_sender, handle.clone())?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
 
-                // if profile img sent store this as well
+                // if profile img sent, then store this as well
                 if img.is_some() {
                     let img: Vec<u8> = img.unwrap().as_bytes().to_vec();
                     if img.len() as u32 > constants.max_fardel_img_size {
                         status = Failure;
-                        msg = Some(String::from("Account registered, but profile image is too large."));
+                        msg = Some(String::from(
+                            "Account registered, but profile image is too large.",
+                        ));
                     } else {
                         store_account_img(&mut deps.storage, &message_sender, img)?;
                     }
                 }
 
-                // if entropy was sent then generate and return a viewing key as well
+                // if entropy was sent, then generate and return a viewing key as well
                 if entropy.is_some() {
                     let prng_seed = constants.prng_seed;
-                    let viewing_key = ViewingKey::new(&env, &prng_seed, (&entropy.unwrap()).as_ref());
+                    let viewing_key =
+                        ViewingKey::new(&env, &prng_seed, (&entropy.unwrap()).as_ref());
                     write_viewing_key(&mut deps.storage, &message_sender, &viewing_key);
                     key = Some(viewing_key);
                 }
             }
-        }        
+        }
     }
 
     Ok(HandleResponse {
@@ -375,7 +375,7 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
             Ok(_) => {
                 status = Failure;
                 msg = Some(String::from("Handle is already in use."))
-            },
+            }
             Err(_) => {
                 let message_sender = deps.api.canonical_address(&env.message.sender)?;
                 let mut description = String::from("");
@@ -394,8 +394,8 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
                         if !handle.eq(&old_handle) {
                             delete_handle_map(&mut deps.storage, old_handle);
                         }
-                    },
-                    _ => { }
+                    }
+                    _ => {}
                 }
                 let stored_account = Account {
                     owner: env.message.sender,
@@ -403,7 +403,8 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
                     description,
                     view_settings,
                     private_settings,
-                }.into_stored(&deps.api)?;
+                }
+                .into_stored(&deps.api)?;
                 map_handle_to_account(&mut deps.storage, &message_sender, handle.clone())?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
             }
@@ -442,9 +443,10 @@ pub fn try_set_description<S: Storage, A: Api, Q: Querier>(
                     description,
                     view_settings: account.view_settings,
                     private_settings: account.private_settings,
-                }.into_stored(&deps.api)?;
+                }
+                .into_stored(&deps.api)?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
-            },
+            }
             _ => {
                 status = Failure;
                 msg = Some(String::from("Account has not been registered, yet."));
@@ -484,9 +486,10 @@ pub fn try_set_view_settings<S: Storage, A: Api, Q: Querier>(
                     description: account.description,
                     view_settings,
                     private_settings: account.private_settings,
-                }.into_stored(&deps.api)?;
+                }
+                .into_stored(&deps.api)?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
-            },
+            }
             _ => {
                 status = Failure;
                 msg = Some(String::from("Account has not been registered, yet."));
@@ -526,9 +529,10 @@ pub fn try_set_private_settings<S: Storage, A: Api, Q: Querier>(
                     description: account.description,
                     view_settings: account.view_settings,
                     private_settings,
-                }.into_stored(&deps.api)?;
+                }
+                .into_stored(&deps.api)?;
                 store_account(&mut deps.storage, stored_account, &message_sender)?;
-            },
+            }
             _ => {
                 status = Failure;
                 msg = Some(String::from("Account has not been registered, yet."));
@@ -539,7 +543,10 @@ pub fn try_set_private_settings<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::SetPrivateSettings { status, msg })?),
+        data: Some(to_binary(&HandleAnswer::SetPrivateSettings {
+            status,
+            msg,
+        })?),
     })
 }
 
@@ -586,9 +593,7 @@ pub fn try_generate_viewing_key<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::GenerateViewingKey { 
-            key,
-        })?),
+        data: Some(to_binary(&HandleAnswer::GenerateViewingKey { key })?),
     })
 }
 
@@ -614,10 +619,7 @@ pub fn try_set_viewing_key<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::SetViewingKey { 
-            status,
-            msg,
-        })?),
+        data: Some(to_binary(&HandleAnswer::SetViewingKey { status, msg })?),
     })
 }
 
@@ -661,11 +663,11 @@ pub fn try_store_block<S: Storage, A: Api, Q: Querier>(
     match get_account_for_handle(&deps.storage, &handle) {
         Ok(blocked) => {
             store_account_block(&mut deps.storage, &blocker, &blocked, block)?;
-        },
+        }
         _ => {
             status = Failure;
             msg = Some(String::from("Handle not in use."));
-        },
+        }
     }
 
     if block {
@@ -704,9 +706,7 @@ pub fn try_follow<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::Follow { 
-            status: Success,
-        })?),
+        data: Some(to_binary(&HandleAnswer::Follow { status: Success })?),
     })
 }
 
@@ -721,9 +721,7 @@ pub fn try_unfollow<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::Unfollow { 
-            status: Success,
-        })?),
+        data: Some(to_binary(&HandleAnswer::Unfollow { status: Success })?),
     })
 }
 
@@ -761,23 +759,27 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
         let img_vec: Vec<u8> = img.clone().unwrap().as_bytes().to_vec();
         if img_vec.len() as u32 > constants.max_fardel_img_size {
             img_size_ok = false;
-        } 
+        }
     }
 
     //let contents_data_size = contents_data.iter().fold(0_usize, |acc, x| acc + x.as_bytes().len());
     let contents_data_size = contents_data.as_bytes().len();
 
     let countable_value: u16 = match countable {
-        Some(value) => u16::try_from(value).or_else(|_| Err(StdError::generic_err("invalid countable value"))),
+        Some(value) => {
+            u16::try_from(value).or_else(|_| Err(StdError::generic_err("invalid countable value")))
+        }
         None => Ok(0_u16),
-    }.unwrap();
+    }
+    .unwrap();
 
-    if !tag_size_ok ||
-       !img_size_ok ||
-       (public_message.as_bytes().len() > constants.max_public_message_len.into()) ||
-       (tags.len() > constants.max_number_of_tags.into()) || 
-       (contents_data_size > constants.max_contents_data_len.into()) ||
-       (cost.u128() > constants.max_cost) {
+    if !tag_size_ok
+        || !img_size_ok
+        || (public_message.as_bytes().len() > constants.max_public_message_len.into())
+        || (tags.len() > constants.max_number_of_tags.into())
+        || (contents_data_size > constants.max_contents_data_len.into())
+        || (cost.u128() > constants.max_cost)
+    {
         status = Failure;
         msg = Some(String::from("Invalid fardel data"));
     } else {
@@ -787,7 +789,8 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
 
         // generate fardel hash id using xx3h
 
-        let hash_data_len = 8 + 16 + 16 + env.message.sender.len() + public_message.as_bytes().len();
+        let hash_data_len =
+            8 + 16 + 16 + env.message.sender.len() + public_message.as_bytes().len();
         let mut hash_data = Vec::with_capacity(hash_data_len);
         hash_data.extend_from_slice(&env.block.height.to_be_bytes());
         hash_data.extend_from_slice(&cost.u128().to_be_bytes());
@@ -814,28 +817,40 @@ pub fn try_carry_fardel<S: Storage, A: Api, Q: Querier>(
             approval_req,
             seal_time: stored_seal_time,
             timestamp: env.block.time,
-        }.into_stored()?;
-    
+        }
+        .into_stored()?;
+
         let global_id = store_fardel(
-            &mut deps.storage, fardel.hash_id, &message_sender, 
-            fardel.public_message, fardel.tags, fardel.contents_data, 
-            fardel.cost, fardel.countable, fardel.approval_req, 
-            fardel.seal_time, fardel.timestamp,
+            &mut deps.storage,
+            fardel.hash_id,
+            &message_sender,
+            fardel.public_message,
+            fardel.tags,
+            fardel.contents_data,
+            fardel.cost,
+            fardel.countable,
+            fardel.approval_req,
+            fardel.seal_time,
+            fardel.timestamp,
         )?;
         // if fardel img sent, then store it as well
         if img.is_some() {
-            store_fardel_img(&mut deps.storage, global_id, img.unwrap().as_bytes().to_vec())?;
+            store_fardel_img(
+                &mut deps.storage,
+                global_id,
+                img.unwrap().as_bytes().to_vec(),
+            )?;
         }
         fardel_id = Some(Uint128(fardel.hash_id));
     }
-    
+
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
         data: Some(to_binary(&HandleAnswer::CarryFardel {
             status,
             msg,
-            fardel_id, 
+            fardel_id,
         })?),
     })
 }
@@ -852,14 +867,16 @@ pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
     match get_fardel_by_hash(&deps.storage, fardel_id) {
         Ok(_) => {
             let global_id = get_global_id_by_hash(&deps.storage, fardel_id)?;
-            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
+            let owner = deps
+                .api
+                .human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
             if owner.eq(&env.message.sender) {
                 seal_fardel(&mut deps.storage, fardel_id)?;
             } else {
                 status = Failure;
                 msg = Some(String::from("You are not the owner of that fardel."))
             }
-        },
+        }
         _ => {
             status = Failure;
             msg = Some(String::from("No Fardel with given id."));
@@ -869,10 +886,7 @@ pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::SealFardel {
-            status,
-            msg,
-        })?),
+        data: Some(to_binary(&HandleAnswer::SealFardel { status, msg })?),
     })
 }
 
@@ -888,14 +902,16 @@ pub fn try_hide_fardel<S: Storage, A: Api, Q: Querier>(
     match get_fardel_by_hash(&deps.storage, fardel_id) {
         Ok(_) => {
             let global_id = get_global_id_by_hash(&deps.storage, fardel_id)?;
-            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
+            let owner = deps
+                .api
+                .human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
             if owner.eq(&env.message.sender) {
                 hide_fardel(&mut deps.storage, global_id)?;
             } else {
                 status = Failure;
                 msg = Some(String::from("You are not the owner of that fardel."))
             }
-        },
+        }
         _ => {
             status = Failure;
             msg = Some(String::from("No Fardel with given id."));
@@ -905,10 +921,7 @@ pub fn try_hide_fardel<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::HideFardel {
-            status,
-            msg,
-        })?),
+        data: Some(to_binary(&HandleAnswer::HideFardel { status, msg })?),
     })
 }
 
@@ -924,14 +937,16 @@ pub fn try_unhide_fardel<S: Storage, A: Api, Q: Querier>(
     match get_fardel_by_hash(&deps.storage, fardel_id) {
         Ok(_) => {
             let global_id = get_global_id_by_hash(&deps.storage, fardel_id)?;
-            let owner = deps.api.human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
+            let owner = deps
+                .api
+                .human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
             if owner.eq(&env.message.sender) {
                 unhide_fardel(&mut deps.storage, global_id)?;
             } else {
                 status = Failure;
                 msg = Some(String::from("You are not the owner of that fardel."))
             }
-        },
+        }
         _ => {
             status = Failure;
             msg = Some(String::from("No Fardel with given id."));
@@ -941,10 +956,7 @@ pub fn try_unhide_fardel<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::UnhideFardel {
-            status,
-            msg,
-        })?),
+        data: Some(to_binary(&HandleAnswer::UnhideFardel { status, msg })?),
     })
 }
 
@@ -964,9 +976,14 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
         status = Failure;
         msg = Some(String::from("invalid number of unpacks to approve"));
     } else {
-        let pending_approvals = get_pending_approvals_from_start(&deps.storage, &owner, number as u32)?;
-        let new_idx: u32 = get_pending_start(&deps.storage, &owner) + pending_approvals.len() as u32;
-        let pending_approvals: Vec<PendingUnpackApproval> = pending_approvals.into_iter().filter(|pu| !pu.canceled).collect();
+        let pending_approvals =
+            get_pending_approvals_from_start(&deps.storage, &owner, number as u32)?;
+        let new_idx: u32 =
+            get_pending_start(&deps.storage, &owner) + pending_approvals.len() as u32;
+        let pending_approvals: Vec<PendingUnpackApproval> = pending_approvals
+            .into_iter()
+            .filter(|pu| !pu.canceled)
+            .collect();
 
         let constants = ReadonlyConfig::from_storage(&deps.storage).constants()?;
         let mut total_commission: u128 = 0;
@@ -974,8 +991,8 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
         for pending_approval in pending_approvals {
             // complete the unpack
             store_unpack(
-                &mut deps.storage, 
-                &pending_approval.unpacker, 
+                &mut deps.storage,
+                &pending_approval.unpacker,
                 pending_approval.fardel_id,
             )?;
             // no need to increment # of unpacks for fardel because we already did that
@@ -985,20 +1002,20 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
 
             // commission_amount = cost * commission_rate_nom / commission_rate_denom
             let cost_u256 = Some(U256::from(cost));
-            let commission_rate_nom = Some(U256::from(constants.transaction_fee.commission_rate_nom));
-            let commission_rate_denom = Some(U256::from(constants.transaction_fee.commission_rate_denom));
-            let commission_amount = div(
-                mul(cost_u256, commission_rate_nom),
-                commission_rate_denom,
-            ).ok_or_else(|| {
-                StdError::generic_err(format!(
+            let commission_rate_nom =
+                Some(U256::from(constants.transaction_fee.commission_rate_nom));
+            let commission_rate_denom =
+                Some(U256::from(constants.transaction_fee.commission_rate_denom));
+            let commission_amount = div(mul(cost_u256, commission_rate_nom), commission_rate_denom)
+                .ok_or_else(|| {
+                    StdError::generic_err(format!(
                     "Cannot calculate cost {} * commission_rate_nom {} / commission_rate_denom {}",
                     cost_u256.unwrap(),
                     commission_rate_nom.unwrap(),
                     commission_rate_denom.unwrap(),
                 ))
-            })?;
-    
+                })?;
+
             let payment_amount = sub(cost_u256, Some(commission_amount)).ok_or_else(|| {
                 StdError::generic_err(format!(
                     "Cannot calculate cost {} - commission_amount {}",
@@ -1006,7 +1023,7 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
                     commission_amount,
                 ))
             })?;
-    
+
             // push payment
             messages.push(CosmosMsg::Bank(BankMsg::Send {
                 from_address: env.contract.address.clone(),
@@ -1016,11 +1033,11 @@ pub fn try_approve_pending_unpacks<S: Storage, A: Api, Q: Querier>(
                     amount: Uint128(payment_amount.low_u128()),
                 }],
             }));
-    
+
             // sum commission
             total_commission += commission_amount.low_u128();
         }
-        
+
         // update the start idx for pending unpacks
         set_pending_start(&mut deps.storage, &owner, new_idx)?;
 
@@ -1076,9 +1093,10 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
 
                         // 1. Check if sender is blocked by fardel owner or the owner's account has been deactivated/banned
                         let owner = get_fardel_owner(&deps.storage, global_id)?;
-                        if is_banned(&deps.storage, &owner) || 
-                           is_deactivated(&deps.storage, &owner) ||
-                           is_blocked_by(&deps.storage, &owner, &message_sender) {
+                        if is_banned(&deps.storage, &owner)
+                            || is_deactivated(&deps.storage, &owner)
+                            || is_blocked_by(&deps.storage, &owner, &message_sender)
+                        {
                             return Err(StdError::unauthorized());
                         }
 
@@ -1086,13 +1104,27 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                         let sent_amount: u128 = sent_coins[0].amount.u128();
 
                         // 2. check it has not already been unpacked by the user
-                        if get_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id).unpacked {
+                        if get_unpacked_status_by_fardel_id(
+                            &deps.storage,
+                            &message_sender,
+                            global_id,
+                        )
+                        .unpacked
+                        {
                             status = Failure;
                             msg = Some(String::from("You have already unpacked this fardel."));
                         // 3. check not pending
-                        } else if get_pending_unpacked_status_by_fardel_id(&deps.storage, &message_sender, global_id).value {
+                        } else if get_pending_unpacked_status_by_fardel_id(
+                            &deps.storage,
+                            &message_sender,
+                            global_id,
+                        )
+                        .value
+                        {
                             status = Failure;
-                            msg = Some(String::from("You have a currently pending unpack for this fardel."));
+                            msg = Some(String::from(
+                                "You have a currently pending unpack for this fardel.",
+                            ));
                         // 4. check it is not sealed
                         } else if get_sealed_status(&deps.storage, global_id) {
                             status = Failure;
@@ -1110,21 +1142,25 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                         // 7. check cost is correct
                         } else if sent_amount != cost {
                             status = Failure;
-                            msg = Some(String::from("Didn't send correct amount of coins to unpack."));
+                            msg = Some(String::from(
+                                "Didn't send correct amount of coins to unpack.",
+                            ));
                         } else {
                             if f.approval_req {
                                 // do a pending unpack
                                 store_pending_unpack(
-                                    &mut deps.storage, 
-                                    &owner, 
-                                    &message_sender, 
+                                    &mut deps.storage,
+                                    &owner,
+                                    &message_sender,
                                     global_id,
                                     env.message.sent_funds[0].clone(),
                                     env.block.time,
                                 )?;
                                 increment_fardel_unpack_count(&mut deps.storage, global_id);
                                 pending = true;
-                                msg = Some(String::from("Fardel unpack is pending approval by owner."));
+                                msg = Some(String::from(
+                                    "Fardel unpack is pending approval by owner.",
+                                ));
                             } else {
                                 store_unpack(&mut deps.storage, &message_sender, global_id)?;
                                 increment_fardel_unpack_count(&mut deps.storage, global_id);
@@ -1133,7 +1169,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
 
                             canonical_owner = Some(owner);
                         }
-                    },
+                    }
                     None => {
                         status = Failure;
                         msg = Some(String::from("Fardel is not available to unpack."));
@@ -1146,7 +1182,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
             }
         }
     }
-    
+
     let mut messages: Vec<CosmosMsg> = vec![];
 
     if pending {
@@ -1157,18 +1193,17 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
         // commission_amount = cost * commission_rate_nom / commission_rate_denom
         let cost_u256 = Some(U256::from(cost));
         let commission_rate_nom = Some(U256::from(constants.transaction_fee.commission_rate_nom));
-        let commission_rate_denom = Some(U256::from(constants.transaction_fee.commission_rate_denom));
-        let commission_amount = div(
-            mul(cost_u256, commission_rate_nom),
-            commission_rate_denom,
-        ).ok_or_else(|| {
-            StdError::generic_err(format!(
-                "Cannot calculate cost {} * commission_rate_nom {} / commission_rate_denom {}",
-                cost_u256.unwrap(),
-                commission_rate_nom.unwrap(),
-                commission_rate_denom.unwrap(),
-            ))
-        })?;
+        let commission_rate_denom =
+            Some(U256::from(constants.transaction_fee.commission_rate_denom));
+        let commission_amount = div(mul(cost_u256, commission_rate_nom), commission_rate_denom)
+            .ok_or_else(|| {
+                StdError::generic_err(format!(
+                    "Cannot calculate cost {} * commission_rate_nom {} / commission_rate_denom {}",
+                    cost_u256.unwrap(),
+                    commission_rate_nom.unwrap(),
+                    commission_rate_denom.unwrap(),
+                ))
+            })?;
 
         let payment_amount = sub(cost_u256, Some(commission_amount)).ok_or_else(|| {
             StdError::generic_err(format!(
@@ -1202,9 +1237,26 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
             }));
         }
 
-        append_sale_tx(&mut deps.storage, canonical_owner.clone().unwrap(), message_sender.clone(), fardel_id, cost, commission_amount, env.block.time)?;
-        append_purchase_tx(&mut deps.storage, canonical_owner.unwrap(), message_sender, fardel_id, cost, commission_amount, env.block.time)?;
-    } else { // return coins to sender if there was a Failure
+        append_sale_tx(
+            &mut deps.storage,
+            canonical_owner.clone().unwrap(),
+            message_sender.clone(),
+            fardel_id,
+            cost,
+            commission_amount,
+            env.block.time,
+        )?;
+        append_purchase_tx(
+            &mut deps.storage,
+            canonical_owner.unwrap(),
+            message_sender,
+            fardel_id,
+            cost,
+            commission_amount,
+            env.block.time,
+        )?;
+    } else {
+        // return coins to sender if there was a Failure
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             from_address: env.contract.address.clone(),
             to_address: env.message.sender,
@@ -1215,7 +1267,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages,
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::UnpackFardel { 
+        data: Some(to_binary(&HandleAnswer::UnpackFardel {
             status,
             msg,
             contents_data,
@@ -1238,11 +1290,11 @@ pub fn try_cancel_pending<S: Storage, A: Api, Q: Querier>(
     match get_fardel_by_global_id(&deps.storage, fardel_id)? {
         Some(fardel) => {
             refund = fardel.cost.amount;
-        },
+        }
         None => {
             status = Failure;
             msg = Some(String::from("No fardel with that id found."));
-        },
+        }
     }
 
     let unpacker = deps.api.canonical_address(&env.message.sender)?;
@@ -1264,10 +1316,7 @@ pub fn try_cancel_pending<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages,
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::CancelPending { 
-            status,
-            msg,
-        })?),
+        data: Some(to_binary(&HandleAnswer::CancelPending { status, msg })?),
     })
 }
 
@@ -1300,15 +1349,15 @@ pub fn try_rate_fardel<S: Storage, A: Api, Q: Querier>(
     } else {
         // fardel has not been unpacked by the user
         status = Failure;
-        msg = Some(String::from("Cannot rate fardel until you have unpacked it."))
+        msg = Some(String::from(
+            "Cannot rate fardel until you have unpacked it.",
+        ))
     }
 
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::RateFardel { 
-            status, msg
-        })?),
+        data: Some(to_binary(&HandleAnswer::RateFardel { status, msg })?),
     })
 }
 
@@ -1330,19 +1379,19 @@ pub fn try_unrate_fardel<S: Storage, A: Api, Q: Querier>(
             } else {
                 subtract_downvote_fardel(&mut deps.storage, fardel_id)?;
             }
-        },
+        }
         _ => {
             status = Failure;
-            msg = Some(String::from("Cannot unrate a fardel that you have not rated."));    
+            msg = Some(String::from(
+                "Cannot unrate a fardel that you have not rated.",
+            ));
         }
     }
 
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::UnrateFardel { 
-            status, msg
-        })?),
+        data: Some(to_binary(&HandleAnswer::UnrateFardel { status, msg })?),
     })
 }
 
@@ -1372,7 +1421,9 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
                 Some(r) => {
                     if has_rated(&deps.storage, &message_sender, fardel_id) {
                         status = Failure;
-                        msg = Some(String::from("Comment left but cannot rate a fardel more than once."));
+                        msg = Some(String::from(
+                            "Comment left but cannot rate a fardel more than once.",
+                        ));
                     } else if r {
                         set_rated(&mut deps.storage, &message_sender, fardel_id, true)?;
                         add_upvote_fardel(&mut deps.storage, fardel_id)?;
@@ -1380,22 +1431,22 @@ pub fn try_comment_on_fardel<S: Storage, A: Api, Q: Querier>(
                         set_rated(&mut deps.storage, &message_sender, fardel_id, false)?;
                         add_downvote_fardel(&mut deps.storage, fardel_id)?;
                     }
-                },
+                }
                 _ => {}
             }
         }
     } else {
         // fardel has not been unpacked by the user
         status = Failure;
-        msg = Some(String::from("Cannot comment or rate fardel until you have unpacked it."))
+        msg = Some(String::from(
+            "Cannot comment or rate fardel until you have unpacked it.",
+        ))
     }
 
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::CommentOnFardel { 
-            status, msg
-        })?),
+        data: Some(to_binary(&HandleAnswer::CommentOnFardel { status, msg })?),
     })
 }
 
@@ -1427,8 +1478,6 @@ pub fn try_delete_comment<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::DeleteComment { 
-            status, msg
-        })?),
+        data: Some(to_binary(&HandleAnswer::DeleteComment { status, msg })?),
     })
 }

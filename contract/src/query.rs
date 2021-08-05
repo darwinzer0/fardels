@@ -1,33 +1,22 @@
-use cosmwasm_std::{
-    to_binary, Api, Extern, HumanAddr, Querier, 
-    StdError, Storage, QueryResult, Uint128,
-    debug_print,
-};
 use crate::msg::{
-    QueryAnswer, ResponseStatus, CommentResponse,
-    ResponseStatus::Success, ResponseStatus::Failure, 
-    FardelResponse, FardelBatchResponse,
-    PendingApprovalResponse,
+    CommentResponse, FardelBatchResponse, FardelResponse, PendingApprovalResponse, QueryAnswer,
+    RegisteredAccountsResponse, ResponseStatus, ResponseStatus::Failure, ResponseStatus::Success,
 };
 use crate::state::{
-    ReadonlyConfig,
-    get_total_fardel_count,
-    get_account, get_account_for_handle,
-    get_account_img,
-    Fardel, get_fardel_by_global_id, get_fardel_by_hash,
-    get_fardels, get_fardel_img, get_fardel_owner,
-    get_number_of_fardels, get_sealed_status, is_fardel_hidden,
-    get_global_id_by_hash, get_rating,
-    Account,
-    get_following, get_followers, is_following, get_number_of_following, get_number_of_followers, get_follower_count,
-    is_banned, is_deactivated,
-    get_unpacked_status_by_fardel_id, 
-    get_upvotes, get_downvotes, 
-    get_comments, get_number_of_comments,
-    SaleTx, PurchaseTx, get_sale_txs, get_purchase_txs,
-    get_unpacked_by_unpacker, get_number_of_unpacked_by_unpacker,
-    get_pending_approvals_from_start,
-    get_pending_unpacked_status_by_fardel_id,
+    get_account, get_account_for_handle, get_account_img, get_comments, get_downvotes,
+    get_fardel_by_global_id, get_fardel_by_hash, get_fardel_img, get_fardel_owner, get_fardels,
+    get_follower_count, get_followers, get_following, get_global_id_by_hash,
+    get_number_of_comments, get_number_of_fardels, get_number_of_followers,
+    get_number_of_following, get_number_of_unpacked_by_unpacker, get_pending_approvals_from_start,
+    get_pending_unpacked_status_by_fardel_id, get_purchase_txs, get_rating,
+    get_registered_addresses, get_sale_txs, get_sealed_status, get_total_fardel_count,
+    get_unpacked_by_unpacker, get_unpacked_status_by_fardel_id, get_upvotes, is_banned,
+    is_deactivated, is_fardel_hidden, is_following, Account, Fardel, PurchaseTx, ReadonlyConfig,
+    SaleTx, UnpackedFardel,
+};
+use cosmwasm_std::{
+    debug_print, to_binary, Api, Extern, HumanAddr, Querier, QueryResult, StdError, Storage,
+    Uint128,
 };
 
 pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
@@ -62,7 +51,7 @@ pub fn query_is_handle_available<S: Storage, A: Api, Q: Querier>(
 ) -> QueryResult {
     let response = match get_account_for_handle(&deps.storage, &handle) {
         Ok(_) => true,
-        Err(_) => false
+        Err(_) => false,
     };
     let answer = QueryAnswer::IsHandleAvailable { response };
     to_binary(&answer)
@@ -74,51 +63,19 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     fardel_id: Uint128,
 ) -> QueryResult {
     let fardel_id = fardel_id.u128();
-
     let fardel = get_fardel_by_hash(&deps.storage, fardel_id)?;
-    //let fardel = match get_fardel_by_hash(&deps.storage, fardel_id) {
-    //    Ok(fardel) => { fardel },
-    //    Err(_) => {
-    //        return Err(StdError::generic_err(format!("fail to get fardel by hash id {}", fardel_id)));
-    //    }
-    //};
+
     let fardel = match fardel {
-        Some(fardel) => { fardel },
-        None => { 
-            return Err(StdError::generic_err("Fardel not found.",));
+        Some(fardel) => fardel,
+        None => {
+            return Err(StdError::generic_err("Fardel not found."));
         }
     };
-    
+
     let global_id = fardel.global_id.u128();
 
     let upvotes: i32 = get_upvotes(&deps.storage, global_id) as i32;
     let downvotes: i32 = get_downvotes(&deps.storage, global_id) as i32;
-
-    // get last 10 comments
-    /*
-    let comments: Vec<CommentResponse> = get_comments(&deps.storage, global_id, 0_u32, 10_u32)?
-        .iter()
-        .map(|c| {
-            let commenter_account = get_account(&deps.storage, &c.commenter).unwrap();
-            let mut response_fardel_id: Option<Uint128> = None;
-            let mut response_comment_id: Option<i32> = None;
-            if address.is_some() {
-                let unpacker_address = address.clone().unwrap();
-                let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-                if unpacker == c.commenter {
-                    response_fardel_id = Some(fardel.hash_id);
-                    response_comment_id = Some(c.idx as i32);
-                }
-            }
-            CommentResponse {
-                text: String::from_utf8(c.text.clone()).ok().unwrap(),
-                handle: String::from_utf8(commenter_account.handle).ok().unwrap(),
-                fardel_id: response_fardel_id,
-                comment_id: response_comment_id,
-            }
-        })
-        .collect();
-    */
     let number_of_comments = get_number_of_comments(&deps.storage, global_id) as i32;
 
     // unpacked parts
@@ -133,12 +90,13 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     if address.is_some() {
         let unpacker_address = address.clone().unwrap();
         let unpacker = &deps.api.canonical_address(&unpacker_address)?;
-        if get_unpacked_status_by_fardel_id(&deps.storage, unpacker, global_id).unpacked {
+        let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, unpacker, global_id);
+        if unpacked_status.unpacked {
             contents_data = Some(fardel.contents_data);
             unpacked = true;
         } else if banned || deactivated || hidden {
             return Err(StdError::generic_err("Fardel not found."));
-        } 
+        }
     } else if banned || deactivated || hidden {
         return Err(StdError::generic_err("Fardel not found."));
     }
@@ -168,7 +126,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         sealed,
         timestamp,
         contents_data,
-        img
+        img,
     };
     let answer = QueryAnswer::GetFardelById {
         fardel: fardel_response,
@@ -189,7 +147,8 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
 
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
-    let fardels: Vec<Fardel> = get_fardels(&deps.storage, &account, page, page_size).unwrap_or_else(|_| vec![]);
+    let fardels: Vec<Fardel> =
+        get_fardels(&deps.storage, &account, page, page_size).unwrap_or_else(|_| vec![]);
 
     let mut fardels_response: Vec<FardelResponse> = vec![];
     if fardels.len() > 0 {
@@ -202,7 +161,9 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
                     let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id).unpacked {
+                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id)
+                        .unpacked
+                    {
                         unpacked = true;
                     }
                 }
@@ -213,31 +174,6 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 let upvotes: i32 = get_upvotes(&deps.storage, global_id) as i32;
                 let downvotes: i32 = get_downvotes(&deps.storage, global_id) as i32;
 
-                // get last 10 comments
-                /*
-                let comments: Vec<CommentResponse> = get_comments(&deps.storage, global_id, 0_u32, 10_u32).unwrap()
-                    .iter()
-                    .map(|c| {
-                        let commenter_account = get_account(&deps.storage, &c.commenter).unwrap();
-                        let mut response_fardel_id: Option<Uint128> = None;
-                        let mut response_comment_id: Option<i32> = None;
-                        if address.is_some() {
-                            let unpacker_address = address.clone().unwrap();
-                            let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-                            if unpacker == c.commenter {
-                                response_fardel_id = Some(fardel.hash_id);
-                                response_comment_id = Some(c.idx as i32);
-                            }
-                        }
-                        CommentResponse {
-                            text: String::from_utf8(c.text.clone()).ok().unwrap(),
-                            handle: String::from_utf8(commenter_account.handle).ok().unwrap(),
-                            fardel_id: response_fardel_id,
-                            comment_id: response_comment_id,
-                        }
-                    })
-                    .collect();
-                */
                 let number_of_comments = get_number_of_comments(&deps.storage, global_id) as i32;
 
                 // unpacked parts
@@ -247,7 +183,9 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
                     let unpacker = deps.api.canonical_address(&unpacker_address).unwrap();
-                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id).unpacked {
+                    if get_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id)
+                        .unpacked
+                    {
                         contents_data = Some(fardel.contents_data.clone());
                         unpacked = true;
                     }
@@ -302,9 +240,9 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
     let fardel_id = fardel_id.u128();
     let fardel = get_fardel_by_hash(&deps.storage, fardel_id)?;
     let fardel = match fardel {
-        Some(fardel) => { fardel },
-        None => { 
-            return Err(StdError::generic_err("Fardel not found.",));
+        Some(fardel) => fardel,
+        None => {
+            return Err(StdError::generic_err("Fardel not found."));
         }
     };
     let global_id = fardel.global_id.u128();
@@ -349,7 +287,7 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
             }
         })
         .collect();
-    
+
     let answer = QueryAnswer::GetComments { comments };
     to_binary(&answer)
 }
@@ -373,7 +311,8 @@ pub fn query_get_sale_transactions<S: Storage, A: Api, Q: Querier>(
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
-    let txs: Vec<SaleTx> = get_sale_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
+    let txs: Vec<SaleTx> =
+        get_sale_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
     let response = QueryAnswer::GetSaleTransactions { txs };
     to_binary(&response)
 }
@@ -395,7 +334,8 @@ pub fn query_get_purchase_transactions<S: Storage, A: Api, Q: Querier>(
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
-    let txs: Vec<PurchaseTx> = get_purchase_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
+    let txs: Vec<PurchaseTx> =
+        get_purchase_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
     let response = QueryAnswer::GetPurchaseTransactions { txs };
     to_binary(&response)
 }
@@ -430,7 +370,11 @@ pub fn query_get_handle<S: Storage, A: Api, Q: Querier>(
         private_settings = Some(account.private_settings);
     }
 
-    let answer = QueryAnswer::GetHandle { status, handle, private_settings };
+    let answer = QueryAnswer::GetHandle {
+        status,
+        handle,
+        private_settings,
+    };
     to_binary(&answer)
 }
 
@@ -451,9 +395,13 @@ pub fn query_get_following<S: Storage, A: Api, Q: Querier>(
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
-    let following: Vec<String> = get_following(&deps.api, &deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
+    let following: Vec<String> = get_following(&deps.api, &deps.storage, &address, page, page_size)
+        .unwrap_or_else(|_| vec![]);
     let total_count = get_number_of_following(&deps.storage, &address) as i32;
-    let response = QueryAnswer::GetFollowing { following, total_count };
+    let response = QueryAnswer::GetFollowing {
+        following,
+        total_count,
+    };
     to_binary(&response)
 }
 
@@ -472,7 +420,9 @@ pub fn query_is_following<S: Storage, A: Api, Q: Querier>(
 
     let followed_addr = get_account_for_handle(&deps.storage, &handle)?;
     let following = is_following(&deps.storage, &address, &followed_addr);
-    let response = QueryAnswer::IsFollowing { response: following };
+    let response = QueryAnswer::IsFollowing {
+        response: following,
+    };
     to_binary(&response)
 }
 
@@ -493,9 +443,13 @@ pub fn query_get_followers<S: Storage, A: Api, Q: Querier>(
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
-    let followers: Vec<String> = get_followers(&deps.api, &deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
+    let followers: Vec<String> = get_followers(&deps.api, &deps.storage, &address, page, page_size)
+        .unwrap_or_else(|_| vec![]);
     let total_count = get_number_of_followers(&deps.storage, &address) as i32;
-    let response = QueryAnswer::GetFollowers { followers, total_count };
+    let response = QueryAnswer::GetFollowers {
+        followers,
+        total_count,
+    };
     to_binary(&response)
 }
 
@@ -512,8 +466,11 @@ pub fn query_is_pending_unpack<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Account has been deactivated."));
     }
 
-    let pending_unpack = get_pending_unpacked_status_by_fardel_id(&deps.storage, &address, fardel_id.u128());
-    let response = QueryAnswer::IsPendingUnpack { response: pending_unpack.value };
+    let pending_unpack =
+        get_pending_unpacked_status_by_fardel_id(&deps.storage, &address, fardel_id.u128());
+    let response = QueryAnswer::IsPendingUnpack {
+        response: pending_unpack.value,
+    };
     to_binary(&response)
 }
 
@@ -534,18 +491,18 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     let page = page.unwrap_or_else(|| 0_i32) as u32;
     let page_size = page_size.unwrap_or_else(|| 10_i32) as u32;
 
-    let unpacked_ids: Vec<u128> = get_unpacked_by_unpacker(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
-    debug_print!("unpacked ids length: {}", unpacked_ids.len());
+    let unpacked_fardels: Vec<UnpackedFardel> =
+        get_unpacked_by_unpacker(&deps.storage, &address, page, page_size)
+            .unwrap_or_else(|_| vec![]);
     let mut fardels: Vec<FardelResponse> = vec![];
-    for unpack_id in unpacked_ids {
+    for unpacked in unpacked_fardels {
+        let unpack_id = unpacked.fardel_id;
         let fardel = get_fardel_by_global_id(&deps.storage, unpack_id)?;
         let fardel_owner = get_fardel_owner(&deps.storage, unpack_id)?;
         if fardel.is_some() && fardel_owner != address {
             let fardel = fardel.unwrap();
             let upvotes: i32 = get_upvotes(&deps.storage, unpack_id) as i32;
             let downvotes: i32 = get_downvotes(&deps.storage, unpack_id) as i32;
-            // don't get comments
-            //let comments: Vec<CommentResponse> = vec![];
 
             let number_of_comments = get_number_of_comments(&deps.storage, unpack_id) as i32;
 
@@ -581,11 +538,14 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
     let unpacks_count = get_number_of_unpacked_by_unpacker(&deps.storage, &address) as i32;
     let fardels_count = get_number_of_fardels(&deps.storage, &address) as i32;
     let total_count = unpacks_count - fardels_count; // don't include own fardels in # of unpacks
-    let response = QueryAnswer::GetUnpacked { fardels, total_count };
+    let response = QueryAnswer::GetUnpacked {
+        fardels,
+        total_count,
+    };
     to_binary(&response)
 }
 
-// get user's current rating for a fardel 
+// get user's current rating for a fardel
 pub fn query_get_rating<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     account: &HumanAddr,
@@ -602,8 +562,8 @@ pub fn query_get_rating<S: Storage, A: Api, Q: Querier>(
 
     let global_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
     match get_rating(&deps.storage, &address, global_id) {
-        Ok(r) => { rating = Some(r) },
-        Err(_) => { },
+        Ok(r) => rating = Some(r),
+        Err(_) => {}
     };
     let response = QueryAnswer::GetRating { rating };
     to_binary(&response)
@@ -633,13 +593,11 @@ pub fn query_get_pending_approvals<S: Storage, A: Api, Q: Querier>(
             let fardel = fardel.unwrap();
             let account = get_account(&deps.storage, &pu.unpacker)?;
             let handle = account.into_humanized(&deps.api)?.handle;
-            pending.push(
-                PendingApprovalResponse {
-                    fardel_id: fardel.hash_id,
-                    handle,
-                    canceled: pu.canceled,
-                }
-            );
+            pending.push(PendingApprovalResponse {
+                fardel_id: fardel.hash_id,
+                handle,
+                canceled: pu.canceled,
+            });
         }
     }
     let response = QueryAnswer::GetPendingApprovals { pending };
@@ -656,7 +614,7 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
     let config = ReadonlyConfig::from_storage(&deps.storage);
     let constants = config.constants()?;
 
-    // permission check
+    // permission check - admin only
     if deps.api.canonical_address(address)? != constants.admin {
         return Err(StdError::unauthorized());
     }
@@ -665,12 +623,12 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
     let count = count.unwrap_or_else(|| Uint128(10)).u128();
 
     let mut fardels: Vec<FardelBatchResponse> = vec![];
-    let mut end = start+count;
+    let mut end = start + count;
     let total = get_total_fardel_count(&deps.storage);
     if end > total {
         end = total;
     }
-    
+
     for idx in start..end {
         let owner = get_fardel_owner(&deps.storage, idx)?;
         let banned = is_banned(&deps.storage, &owner);
@@ -698,31 +656,72 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                     countable = Some(fardel.countable as i32);
                 }
                 // fardel batch only gets public data
-                fardels.push (
-                    FardelBatchResponse {
-                        global_id: Uint128(idx),
-                        hash_id: fardel.hash_id,
-                        public_message: fardel.public_message.clone(),
-                        tags: fardel.tags,
-                        cost: fardel.cost.amount,
-                        upvotes,
-                        downvotes,
-                        number_of_comments,
-                        countable,
-                        seal_time,
-                        sealed,
-                        timestamp,
-                        img,
-                        owner: account.owner,
-                        handle: account.handle,
-                    }
-                );
+                fardels.push(FardelBatchResponse {
+                    global_id: Uint128(idx),
+                    hash_id: fardel.hash_id,
+                    public_message: fardel.public_message.clone(),
+                    tags: fardel.tags,
+                    cost: fardel.cost.amount,
+                    upvotes,
+                    downvotes,
+                    number_of_comments,
+                    countable,
+                    seal_time,
+                    sealed,
+                    timestamp,
+                    img,
+                    owner: account.owner,
+                    handle: account.handle,
+                });
             }
         }
     }
 
-    let answer = QueryAnswer::GetFardelsBatch {
-        fardels,
-    };
+    let answer = QueryAnswer::GetFardelsBatch { fardels };
+    to_binary(&answer)
+}
+
+// get all registered accounts -- public data only
+pub fn query_get_registered_addresses<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    address: &HumanAddr,
+    start: Option<i32>,
+    count: Option<i32>,
+) -> QueryResult {
+    let config = ReadonlyConfig::from_storage(&deps.storage);
+    let constants = config.constants()?;
+
+    // permission check - admin only
+    if deps.api.canonical_address(address)? != constants.admin {
+        return Err(StdError::unauthorized());
+    }
+
+    let start = start.unwrap_or_else(|| 0_i32) as u32;
+    let count = count.unwrap_or_else(|| 10_i32) as u32;
+
+    let accounts: Vec<RegisteredAccountsResponse> =
+        get_registered_addresses(&deps.storage, start, count)?
+            .iter()
+            .map(|a| {
+                let banned = is_banned(&deps.storage, &a);
+                let deactivated = is_deactivated(&deps.storage, &a);
+                let account = get_account(&deps.storage, &a)
+                    .unwrap()
+                    .into_humanized(&deps.api)
+                    .unwrap();
+                let img = get_account_img(&deps.storage, &a).unwrap_or_else(|_| vec![]);
+                let img_str = String::from_utf8(img).unwrap();
+                RegisteredAccountsResponse {
+                    address: deps.api.human_address(a).unwrap(),
+                    banned,
+                    deactivated,
+                    handle: Some(account.handle),
+                    description: Some(account.description),
+                    view_settings: Some(account.view_settings),
+                    img: Some(img_str),
+                }
+            })
+            .collect();
+    let answer = QueryAnswer::GetRegisteredAccounts { accounts };
     to_binary(&answer)
 }

@@ -1,8 +1,8 @@
+use crate::state::{PurchaseTx, SaleTx, StoredFee};
+use crate::viewing_key::ViewingKey;
+use cosmwasm_std::{Binary, HumanAddr, StdResult, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use cosmwasm_std::{Binary, HumanAddr, Uint128, StdResult};
-use crate::viewing_key::ViewingKey;
-use crate::state::{StoredFee, SaleTx, PurchaseTx};
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct InitMsg {
@@ -21,7 +21,7 @@ pub struct InitMsg {
 
     // fardel (private) settings
     pub max_contents_data_len: Option<i32>,
- 
+
     // user data settings
     pub max_handle_len: Option<i32>,
     pub max_profile_img_size: Option<i32>,
@@ -55,11 +55,11 @@ pub enum HandleMsg {
         padding: Option<String>,
     },
     // Disables the ability for non-admin users to execute handle functions, essentially making it read-only
-    FreezeContract { 
+    FreezeContract {
         padding: Option<String>,
     },
     // Unfreezes the contract
-    UnfreezeContract { 
+    UnfreezeContract {
         padding: Option<String>,
     },
     Ban {
@@ -79,7 +79,7 @@ pub enum HandleMsg {
     },
 
     // Account
-    Register { 
+    Register {
         handle: String,
         description: Option<String>,
         view_settings: Option<String>,
@@ -117,8 +117,8 @@ pub enum HandleMsg {
         key: String,
         padding: Option<String>,
     },
-    Deactivate { 
-        padding: Option<String>, 
+    Deactivate {
+        padding: Option<String>,
     },
     Reactivate {
         padding: Option<String>,
@@ -143,7 +143,7 @@ pub enum HandleMsg {
     },
 
     // My Fardels
-    CarryFardel { 
+    CarryFardel {
         /// public_message is the message that is visible prior to unpacking
         public_message: String,
 
@@ -157,7 +157,7 @@ pub enum HandleMsg {
         cost: Uint128,
 
         /// countable determines maximum number of times a fardel can be unpacked
-        ///   None: No limit on number of sales. 
+        ///   None: No limit on number of sales.
         countable: Option<i32>,
 
         /// approval_req means each unpacking requires approval before the transaction is completed
@@ -171,8 +171,8 @@ pub enum HandleMsg {
         padding: Option<String>,
     },
     /// Seals a fardel so no one can unpack it anymore
-    ///   Once a fardel has been sealed it cannot be unsealed. 
-    ///   If the owner of the fardel wants to make the contents 
+    ///   Once a fardel has been sealed it cannot be unsealed.
+    ///   If the owner of the fardel wants to make the contents
     ///   available again, then they need to carry a new fardel.
     SealFardel {
         fardel_id: Uint128,
@@ -190,7 +190,7 @@ pub enum HandleMsg {
         fardel_id: Uint128,
         padding: Option<String>,
     },
-    /// approves the unpacking of a set number of pending fardels, 
+    /// approves the unpacking of a set number of pending fardels,
     ///   and processes transactions.
     ApprovePendingUnpacks {
         number: Option<i32>,
@@ -199,7 +199,7 @@ pub enum HandleMsg {
 
     // Other fardels
 
-    // If the fardel requires approval it will be pending, 
+    // If the fardel requires approval it will be pending,
     //   otherwise it will unpack and process transaction immediately.
     UnpackFardel {
         fardel_id: Uint128,
@@ -213,8 +213,8 @@ pub enum HandleMsg {
     // Rates a fardel, rating values are defined as follows:
     //   false - downvote
     //   true - upvote
-    // The ratings are public, but only accounts that have unpacked the fardel can rate it. 
-    // An account can only upvote or downvote a fardel once. 
+    // The ratings are public, but only accounts that have unpacked the fardel can rate it.
+    // An account can only upvote or downvote a fardel once.
     RateFardel {
         fardel_id: Uint128,
         rating: bool,
@@ -237,7 +237,7 @@ pub enum HandleMsg {
         fardel_id: Uint128,
         comment_id: i32,
         padding: Option<String>,
-    }
+    },
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -470,7 +470,7 @@ pub enum QueryMsg {
         page_size: Option<i32>,
     },
     // Returns bool saying whether the given fardel is a pending unpack for the logged in user
-    IsPendingUnpack{
+    IsPendingUnpack {
         address: HumanAddr,
         key: String,
         fardel_id: Uint128,
@@ -516,26 +516,44 @@ pub enum QueryMsg {
         start: Option<Uint128>,
         count: Option<Uint128>,
     },
+    GetRegisteredAddresses {
+        // must match admin
+        address: HumanAddr,
+        key: String,
+        start: Option<i32>,
+        count: Option<i32>,
+    },
 }
 
 impl QueryMsg {
     pub fn get_validation_params(&self) -> (Vec<&HumanAddr>, ViewingKey) {
         match self {
-            Self::GetSaleTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
-            Self::GetPurchaseTransactions { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetSaleTransactions { address, key, .. } => {
+                (vec![address], ViewingKey(key.clone()))
+            }
+            Self::GetPurchaseTransactions { address, key, .. } => {
+                (vec![address], ViewingKey(key.clone()))
+            }
             Self::GetHandle { address, key } => (vec![address], ViewingKey(key.clone())),
             Self::GetFollowing { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::IsFollowing { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetFollowers { address, key, .. } => (vec![address], ViewingKey(key.clone())),
-            Self::GetFardelByIdAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetFardelByIdAuth { address, key, .. } => {
+                (vec![address], ViewingKey(key.clone()))
+            }
             Self::GetFardelsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::IsPendingUnpack { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetUnpacked { address, key, .. } => (vec![address], ViewingKey(key.clone())),
-            Self::GetPendingApprovals { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetPendingApprovals { address, key, .. } => {
+                (vec![address], ViewingKey(key.clone()))
+            }
             Self::GetCommentsAuth { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             Self::GetRating { address, key, .. } => (vec![address], ViewingKey(key.clone())),
             // Admin functions
             Self::GetFardelsBatch { address, key, .. } => (vec![address], ViewingKey(key.clone())),
+            Self::GetRegisteredAddresses { address, key, .. } => {
+                (vec![address], ViewingKey(key.clone()))
+            }
             _ => panic!("This query type does not require authentication"),
         }
     }
@@ -545,7 +563,7 @@ impl QueryMsg {
 pub struct CommentResponse {
     pub text: String,
     pub handle: String,
-    // comment id and fardel id is only set if the authenticated user 
+    // comment id and fardel id is only set if the authenticated user
     //   is the commenter (enables deletion)
     pub fardel_id: Option<Uint128>,
     pub comment_id: Option<i32>,
@@ -559,8 +577,6 @@ pub struct FardelResponse {
     pub unpacked: bool,
     pub sealed: bool,
     pub tags: Vec<String>,
-    // returns only latest comments, use GetComments for older comments
-    // pub comments: Vec<CommentResponse>,
     // total number of comments
     pub number_of_comments: i32,
     pub upvotes: i32,
@@ -572,6 +588,13 @@ pub struct FardelResponse {
     pub countable: Option<i32>,
     // unpacked parts
     pub contents_data: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PendingApprovalResponse {
+    pub handle: String,
+    pub fardel_id: Uint128,
+    pub canceled: bool,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -591,14 +614,18 @@ pub struct FardelBatchResponse {
     pub timestamp: i32,
     pub img: String,
     pub seal_time: Option<i32>,
-    pub countable: Option<i32>, 
+    pub countable: Option<i32>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PendingApprovalResponse {
-    pub handle: String,
-    pub fardel_id: Uint128,
-    pub canceled: bool,
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct RegisteredAccountsResponse {
+    pub address: HumanAddr,
+    pub handle: Option<String>,
+    pub banned: bool,
+    pub deactivated: bool,
+    pub description: Option<String>,
+    pub view_settings: Option<String>,
+    pub img: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -666,10 +693,8 @@ pub enum QueryAnswer {
     GetFardelsBatch {
         fardels: Vec<FardelBatchResponse>,
     },
-
-    // Authentication error
-    ViewingKeyError {
-        msg: String,
+    GetRegisteredAccounts {
+        accounts: Vec<RegisteredAccountsResponse>,
     },
 }
 
