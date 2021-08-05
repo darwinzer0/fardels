@@ -79,13 +79,13 @@ pub enum HandleMsg {
     },
 
     // Account
-    Register {
+    Register { // can also be used to change full profile for already registered accounts
         handle: String,
         description: Option<String>,
         view_settings: Option<String>,
         private_settings: Option<String>,
         img: Option<String>,
-        // optionally generate viewing key as well if entropy is sent
+        // optionally generate viewing key, if entropy is sent
         entropy: Option<String>,
         padding: Option<String>,
     },

@@ -292,58 +292,55 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
         status = Failure;
         msg = Some(String::from("Private settings are too long."));
     } else {
-        match get_account_for_handle(&deps.storage, &handle) {
-            Ok(_) => {
-                status = Failure;
-                msg = Some(String::from("Handle is already in use."))
+        let message_sender = deps.api.canonical_address(&env.message.sender)?;
+        let handle_owner = get_account_for_handle(&deps.storage, &handle);
+        if handle_owner.is_ok() && handle_owner.unwrap() != message_sender {
+            status = Failure;
+            msg = Some(String::from("Handle is already in use."));
+        } else {
+            // check if previously registered
+            match get_account(&mut deps.storage, &message_sender) {
+                Ok(stored_account) => {
+                    // yes, delete old handle if it is different
+                    let account = stored_account.into_humanized(&deps.api)?;
+                    let old_handle = account.handle;
+                    if !handle.eq(&old_handle) {
+                        delete_handle_map(&mut deps.storage, old_handle);
+                    }
+                }
+                _ => {}
             }
-            Err(_) => {
-                let message_sender = deps.api.canonical_address(&env.message.sender)?;
+            let stored_account = Account {
+                owner: env.message.sender.clone(),
+                handle: handle.clone(),
+                description,
+                view_settings,
+                private_settings,
+            }
+            .into_stored(&deps.api)?;
+            map_handle_to_account(&mut deps.storage, &message_sender, handle.clone())?;
+            store_account(&mut deps.storage, stored_account, &message_sender)?;
 
-                // check if previously registered
-                match get_account(&mut deps.storage, &message_sender) {
-                    Ok(stored_account) => {
-                        // yes, delete old handle if it is different
-                        let account = stored_account.into_humanized(&deps.api)?;
-                        let old_handle = account.handle;
-                        if !handle.eq(&old_handle) {
-                            delete_handle_map(&mut deps.storage, old_handle);
-                        }
-                    }
-                    _ => {}
+            // if profile img sent, then store this as well
+            if img.is_some() {
+                let img: Vec<u8> = img.unwrap().as_bytes().to_vec();
+                if img.len() as u32 > constants.max_fardel_img_size {
+                    status = Failure;
+                    msg = Some(String::from(
+                        "Account registered, but profile image is too large.",
+                    ));
+                } else {
+                    store_account_img(&mut deps.storage, &message_sender, img)?;
                 }
-                let stored_account = Account {
-                    owner: env.message.sender.clone(),
-                    handle: handle.clone(),
-                    description,
-                    view_settings,
-                    private_settings,
-                }
-                .into_stored(&deps.api)?;
-                map_handle_to_account(&mut deps.storage, &message_sender, handle.clone())?;
-                store_account(&mut deps.storage, stored_account, &message_sender)?;
+            }
 
-                // if profile img sent, then store this as well
-                if img.is_some() {
-                    let img: Vec<u8> = img.unwrap().as_bytes().to_vec();
-                    if img.len() as u32 > constants.max_fardel_img_size {
-                        status = Failure;
-                        msg = Some(String::from(
-                            "Account registered, but profile image is too large.",
-                        ));
-                    } else {
-                        store_account_img(&mut deps.storage, &message_sender, img)?;
-                    }
-                }
-
-                // if entropy was sent, then generate and return a viewing key as well
-                if entropy.is_some() {
-                    let prng_seed = constants.prng_seed;
-                    let viewing_key =
-                        ViewingKey::new(&env, &prng_seed, (&entropy.unwrap()).as_ref());
-                    write_viewing_key(&mut deps.storage, &message_sender, &viewing_key);
-                    key = Some(viewing_key);
-                }
+            // if entropy was sent, then generate and return a viewing key as well
+            if entropy.is_some() {
+                let prng_seed = constants.prng_seed;
+                let viewing_key =
+                    ViewingKey::new(&env, &prng_seed, (&entropy.unwrap()).as_ref());
+                write_viewing_key(&mut deps.storage, &message_sender, &viewing_key);
+                key = Some(viewing_key);
             }
         }
     }
