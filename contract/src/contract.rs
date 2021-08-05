@@ -16,6 +16,7 @@ use crate::query::{
     query_is_following, query_is_handle_available, query_is_pending_unpack,
 };
 use crate::state::{is_banned, is_frozen, read_viewing_key, Config, Constants, ReadonlyConfig};
+use crate::utils::space_pad;
 use crate::validation::{
     valid_max_contents_data_len, valid_max_description_len, valid_max_handle_len,
     valid_max_number_of_tags, valid_max_private_settings_len, valid_max_public_message_len,
@@ -93,6 +94,16 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     Ok(InitResponse::default())
 }
 
+fn pad_response(response: StdResult<HandleResponse>) -> StdResult<HandleResponse> {
+    response.map(|mut response| {
+        response.data = response.data.map(|mut data| {
+            space_pad(RESPONSE_BLOCK_SIZE, &mut data.0);
+            data
+        });
+        response
+    })
+}
+
 pub fn handle<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -107,7 +118,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::unauthorized());
     }
 
-    match msg {
+    let response = match msg {
         // Admin
         HandleMsg::SetConstants {
             transaction_fee,
@@ -241,7 +252,9 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             comment_id,
             ..
         } => try_delete_comment(deps, env, fardel_id, comment_id),
-    }
+    };
+
+    pad_response(response)
 }
 
 pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryMsg) -> QueryResult {
