@@ -1,23 +1,31 @@
 use crate::contract::DENOM;
+use crate::fardel_state::{
+    decrement_fardel_unpack_count, get_fardel_by_global_id, get_fardel_by_hash, get_fardel_owner,
+    get_global_id_by_hash, get_sealed_status, get_total_fardel_count, hide_fardel,
+    increment_fardel_unpack_count, seal_fardel, store_fardel, store_fardel_img, unhide_fardel,
+    Fardel,
+};
 use crate::msg::{
     Fee, HandleAnswer, ResponseStatus, ResponseStatus::Failure, ResponseStatus::Success,
 };
-use crate::state::{
-    add_downvote_fardel, add_upvote_fardel, append_purchase_tx, append_sale_tx,
-    cancel_pending_unpack, comment_on_fardel, decrement_fardel_unpack_count, delete_comment,
-    delete_handle_map, get_account, get_account_for_handle, get_comment_by_id,
-    get_commission_balance, get_fardel_by_global_id, get_fardel_by_hash, get_fardel_owner,
-    get_global_id_by_hash, get_pending_approvals_from_start, get_pending_start,
-    get_pending_unpacked_status_by_fardel_id, get_rating, get_sealed_status,
-    get_total_fardel_count, get_unpacked_status_by_fardel_id, has_rated, hide_fardel,
-    increment_fardel_unpack_count, is_banned, is_blocked_by, is_deactivated, map_handle_to_account,
-    remove_following, remove_rated, seal_fardel, set_frozen, set_pending_start, set_rated,
-    store_account, store_account_ban, store_account_block, store_account_deactivated,
-    store_account_img, store_fardel, store_fardel_img, store_following, store_pending_unpack,
-    store_unpack, subtract_downvote_fardel, subtract_upvote_fardel, unhide_fardel,
-    write_viewing_key, Account, Config, Fardel, PendingUnpackApproval, ReadonlyConfig,
+use crate::social_state::{
+    add_downvote_fardel, add_upvote_fardel, comment_on_fardel, delete_comment, get_comment_by_id,
+    get_rating, has_rated, is_blocked_by, remove_following, remove_rated, set_rated,
+    store_account_block, store_following, subtract_downvote_fardel, subtract_upvote_fardel,
 };
+use crate::state::{get_commission_balance, set_frozen, Config, ReadonlyConfig};
+use crate::tx_state::{append_purchase_tx, append_sale_tx};
 use crate::u256_math::*;
+use crate::unpack_state::{
+    cancel_pending_unpack, get_pending_approvals_from_start, get_pending_start,
+    get_pending_unpacked_status_by_fardel_id, get_unpacked_status_by_fardel_id, set_pending_start,
+    store_pending_unpack, store_unpack, PendingUnpackApproval,
+};
+use crate::user_state::{
+    delete_handle_map, get_account, get_account_for_handle, is_banned, is_deactivated,
+    map_handle_to_account, store_account, store_account_ban, store_account_deactivated,
+    store_account_img, write_viewing_key, Account, address_list_add,
+};
 use crate::validation::{
     has_whitespace, valid_max_contents_data_len, valid_max_description_len, valid_max_handle_len,
     valid_max_number_of_tags, valid_max_public_message_len, valid_max_query_page_size,
@@ -25,8 +33,8 @@ use crate::validation::{
 };
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{
-    debug_print, to_binary, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Env, Extern,
-    HandleResponse, HumanAddr, Querier, StdError, StdResult, Storage, Uint128,
+    to_binary, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Env, Extern, HandleResponse,
+    HumanAddr, Querier, StdError, StdResult, Storage, Uint128,
 };
 use primitive_types::U256;
 use std::convert::TryFrom;
@@ -308,8 +316,12 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                         delete_handle_map(&mut deps.storage, old_handle);
                     }
                 }
-                _ => {}
+                _ => {
+                    // new registration
+                    address_list_add(&mut deps.storage, &message_sender)?;
+                }
             }
+
             let stored_account = Account {
                 owner: env.message.sender.clone(),
                 handle: handle.clone(),
@@ -327,7 +339,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
                 if img.len() as u32 > constants.max_fardel_img_size {
                     status = Failure;
                     msg = Some(String::from(
-                        "Account registered, but profile image is too large.",
+                        "Account registered, but profile image was too many bytes.",
                     ));
                 } else {
                     store_account_img(&mut deps.storage, &message_sender, img)?;
@@ -337,8 +349,7 @@ pub fn try_register<S: Storage, A: Api, Q: Querier>(
             // if entropy was sent, then generate and return a viewing key as well
             if entropy.is_some() {
                 let prng_seed = constants.prng_seed;
-                let viewing_key =
-                    ViewingKey::new(&env, &prng_seed, (&entropy.unwrap()).as_ref());
+                let viewing_key = ViewingKey::new(&env, &prng_seed, (&entropy.unwrap()).as_ref());
                 write_viewing_key(&mut deps.storage, &message_sender, &viewing_key);
                 key = Some(viewing_key);
             }
@@ -392,7 +403,10 @@ pub fn try_set_handle<S: Storage, A: Api, Q: Querier>(
                             delete_handle_map(&mut deps.storage, old_handle);
                         }
                     }
-                    _ => {}
+                    _ => {
+                        // new registration
+                        address_list_add(&mut deps.storage, &message_sender)?;
+                    }
                 }
                 let stored_account = Account {
                     owner: env.message.sender,
@@ -1128,6 +1142,7 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                             msg = Some(String::from("Fardel has been sealed."));
                         // 5. check it has not expired, 0 seal_time means never expires
                         } else if f.seal_time > 0 && f.seal_time < env.block.time {
+                            // it is past seal time, so seal it
                             seal_fardel(&mut deps.storage, global_id)?;
                             status = Failure;
                             msg = Some(String::from("Fardel has been sealed."));

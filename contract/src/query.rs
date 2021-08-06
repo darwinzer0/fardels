@@ -1,22 +1,30 @@
+use crate::fardel_state::{
+    get_fardel_by_global_id, get_fardel_by_hash, get_fardel_img, get_fardel_owner, get_fardels,
+    get_global_id_by_hash, get_number_of_fardels, get_sealed_status, get_total_fardel_count,
+    is_fardel_hidden, Fardel,
+};
 use crate::msg::{
     CommentResponse, FardelBatchResponse, FardelResponse, PendingApprovalResponse, QueryAnswer,
     RegisteredAccountsResponse, ResponseStatus, ResponseStatus::Failure, ResponseStatus::Success,
 };
-use crate::state::{
-    get_account, get_account_for_handle, get_account_img, get_comments, get_downvotes,
-    get_fardel_by_global_id, get_fardel_by_hash, get_fardel_img, get_fardel_owner, get_fardels,
-    get_follower_count, get_followers, get_following, get_global_id_by_hash,
-    get_number_of_comments, get_number_of_fardels, get_number_of_followers,
-    get_number_of_following, get_number_of_unpacked_by_unpacker, get_pending_approvals_from_start,
-    get_pending_unpacked_status_by_fardel_id, get_purchase_txs, get_rating,
-    get_registered_addresses, get_sale_txs, get_sealed_status, get_total_fardel_count,
-    get_unpacked_by_unpacker, get_unpacked_status_by_fardel_id, get_upvotes, is_banned,
-    is_deactivated, is_fardel_hidden, is_following, Account, Fardel, PurchaseTx, ReadonlyConfig,
-    SaleTx, UnpackedFardel,
+use crate::social_state::{
+    get_comments, get_downvotes, get_follower_count, get_followers, get_following,
+    get_number_of_comments, get_number_of_followers, get_number_of_following, get_rating,
+    get_upvotes, is_following,
+};
+use crate::state::ReadonlyConfig;
+use crate::tx_state::{get_purchase_txs, get_sale_txs, PurchaseTx, SaleTx};
+use crate::unpack_state::{
+    get_number_of_unpacked_by_unpacker, get_pending_approvals_from_start,
+    get_pending_unpacked_status_by_fardel_id, get_unpacked_by_unpacker,
+    get_unpacked_status_by_fardel_id, UnpackedFardel,
+};
+use crate::user_state::{
+    get_account, get_account_for_handle, get_account_img, get_registered_addresses, is_banned,
+    is_deactivated, Account, get_total_number_registered_accounts,
 };
 use cosmwasm_std::{
-    debug_print, to_binary, Api, Extern, HumanAddr, Querier, QueryResult, StdError, Storage,
-    Uint128,
+    to_binary, Api, Extern, HumanAddr, Querier, QueryResult, StdError, Storage, Uint128,
 };
 
 pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
@@ -722,6 +730,7 @@ pub fn query_get_registered_addresses<S: Storage, A: Api, Q: Querier>(
                 }
             })
             .collect();
-    let answer = QueryAnswer::GetRegisteredAccounts { accounts };
+    let total_registered = get_total_number_registered_accounts(&deps.storage)? as i32;
+    let answer = QueryAnswer::GetRegisteredAccounts { accounts, total_registered };
     to_binary(&answer)
 }

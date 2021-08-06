@@ -1,4 +1,5 @@
-use crate::state::{PurchaseTx, SaleTx, StoredFee};
+use crate::state::StoredFee;
+use crate::tx_state::{PurchaseTx, SaleTx};
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{Binary, HumanAddr, StdResult, Uint128};
 use schemars::JsonSchema;
@@ -79,7 +80,8 @@ pub enum HandleMsg {
     },
 
     // Account
-    Register { // can also be used to change full profile for already registered accounts
+    Register {
+        // can also be used to change full profile for already registered accounts
         handle: String,
         description: Option<String>,
         view_settings: Option<String>,
@@ -695,6 +697,7 @@ pub enum QueryAnswer {
     },
     GetRegisteredAccounts {
         accounts: Vec<RegisteredAccountsResponse>,
+        total_registered: i32,
     },
 }
 

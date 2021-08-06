@@ -15,7 +15,8 @@ use crate::query::{
     query_get_registered_addresses, query_get_sale_transactions, query_get_unpacked,
     query_is_following, query_is_handle_available, query_is_pending_unpack,
 };
-use crate::state::{is_banned, is_frozen, read_viewing_key, Config, Constants, ReadonlyConfig};
+use crate::state::{is_frozen, Config, Constants, ReadonlyConfig};
+use crate::user_state::{is_banned, read_viewing_key};
 use crate::utils::space_pad;
 use crate::validation::{
     valid_max_contents_data_len, valid_max_description_len, valid_max_handle_len,
@@ -25,8 +26,8 @@ use crate::validation::{
 };
 use crate::viewing_key::VIEWING_KEY_SIZE;
 use cosmwasm_std::{
-    debug_print, Api, Env, Extern, HandleResponse, InitResponse, Querier, QueryResult, StdError,
-    StdResult, Storage,
+    Api, Env, Extern, HandleResponse, InitResponse, Querier, QueryResult, StdError, StdResult,
+    Storage,
 };
 use secret_toolkit::crypto::sha_256;
 
