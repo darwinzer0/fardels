@@ -882,7 +882,7 @@ pub fn try_seal_fardel<S: Storage, A: Api, Q: Querier>(
                 .api
                 .human_address(&get_fardel_owner(&deps.storage, global_id)?)?;
             if owner.eq(&env.message.sender) {
-                seal_fardel(&mut deps.storage, fardel_id)?;
+                seal_fardel(&mut deps.storage, global_id)?;
             } else {
                 status = Failure;
                 msg = Some(String::from("You are not the owner of that fardel."))
