@@ -120,8 +120,13 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     if fardel.countable > 0 {
         countable = Some(fardel.countable as i32);
     }
+
+    let fardel_owner = get_fardel_owner(&deps.storage, global_id).unwrap();
+    let carrier = get_account(&deps.storage, &fardel_owner).unwrap().into_humanized(&deps.api).unwrap().handle;
+
     let fardel_response = FardelResponse {
         id: fardel.hash_id,
+        carrier,
         public_message: fardel.public_message,
         tags: fardel.tags,
         cost: fardel.cost.amount,
@@ -211,8 +216,12 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     countable = Some(fardel.countable as i32);
                 }
 
+                let fardel_owner = get_fardel_owner(&deps.storage, global_id).unwrap();
+                let carrier = get_account(&deps.storage, &fardel_owner).unwrap().into_humanized(&deps.api).unwrap().handle;
+
                 FardelResponse {
                     id: fardel.hash_id,
+                    carrier,
                     public_message: fardel.public_message.clone(),
                     tags: fardel.tags.clone(),
                     cost: fardel.cost.amount,
@@ -525,8 +534,13 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
             if fardel.countable > 0 {
                 countable = Some(fardel.countable as i32);
             }
+
+            let fardel_owner = get_fardel_owner(&deps.storage, unpack_id).unwrap();
+            let carrier = get_account(&deps.storage, &fardel_owner).unwrap().into_humanized(&deps.api).unwrap().handle;
+
             fardels.push(FardelResponse {
                 id: fardel.hash_id,
+                carrier,
                 public_message: fardel.public_message.clone(),
                 tags: fardel.tags,
                 cost: fardel.cost.amount,

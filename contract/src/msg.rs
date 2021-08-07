@@ -574,6 +574,7 @@ pub struct CommentResponse {
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct FardelResponse {
     pub id: Uint128,
+    pub carrier: String,
     pub public_message: String,
     pub cost: Uint128,
     pub unpacked: bool,
