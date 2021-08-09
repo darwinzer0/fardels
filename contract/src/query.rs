@@ -89,6 +89,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     // unpacked parts
     let mut contents_data: Option<String> = None;
     let mut unpacked = false;
+    let mut pending_unpack = false;
 
     let owner = get_fardel_owner(&deps.storage, global_id)?;
     let banned = is_banned(&deps.storage, &owner);
@@ -99,9 +100,12 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         let unpacker_address = address.clone().unwrap();
         let unpacker = &deps.api.canonical_address(&unpacker_address)?;
         let unpacked_status = get_unpacked_status_by_fardel_id(&deps.storage, unpacker, global_id);
+        
         if unpacked_status.unpacked {
             contents_data = Some(fardel.contents_data);
             unpacked = true;
+        } else if get_pending_unpacked_status_by_fardel_id(&deps.storage, unpacker, global_id).value {
+            pending_unpack = true;
         } else if banned || deactivated || hidden {
             return Err(StdError::generic_err("Fardel not found."));
         }
@@ -131,6 +135,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         tags: fardel.tags,
         cost: fardel.cost.amount,
         unpacked,
+        pending_unpack,
         upvotes,
         downvotes,
         number_of_comments,
@@ -170,6 +175,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
             .filter(|fardel| {
                 let global_id = fardel.global_id.u128();
                 let mut unpacked = false;
+                let mut pending_unpack = false;
                 let hidden = is_fardel_hidden(&deps.storage, global_id);
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
@@ -178,9 +184,11 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                         .unpacked
                     {
                         unpacked = true;
+                    } else if get_pending_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id).value {
+                        pending_unpack = true;
                     }
                 }
-                !(banned || deactivated || hidden) || unpacked
+                !(banned || deactivated || hidden) || unpacked || pending_unpack
             })
             .map(|fardel| {
                 let global_id = fardel.global_id.u128();
@@ -192,6 +200,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 // unpacked parts
                 let mut contents_data: Option<String> = None;
                 let mut unpacked = false;
+                let mut pending_unpack = false;
 
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
@@ -201,6 +210,8 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     {
                         contents_data = Some(fardel.contents_data.clone());
                         unpacked = true;
+                    } else if get_pending_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id).value {
+                        pending_unpack = true;
                     }
                 }
 
@@ -226,6 +237,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     tags: fardel.tags.clone(),
                     cost: fardel.cost.amount,
                     unpacked,
+                    pending_unpack,
                     upvotes,
                     downvotes,
                     number_of_comments,
@@ -483,8 +495,10 @@ pub fn query_is_pending_unpack<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Account has been deactivated."));
     }
 
+    let global_id = get_global_id_by_hash(&deps.storage, fardel_id.u128())?;
+
     let pending_unpack =
-        get_pending_unpacked_status_by_fardel_id(&deps.storage, &address, fardel_id.u128());
+        get_pending_unpacked_status_by_fardel_id(&deps.storage, &address, global_id);
     let response = QueryAnswer::IsPendingUnpack {
         response: pending_unpack.value,
     };
@@ -545,6 +559,7 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
                 tags: fardel.tags,
                 cost: fardel.cost.amount,
                 unpacked: true,
+                pending_unpack: false,
                 upvotes,
                 downvotes,
                 number_of_comments,

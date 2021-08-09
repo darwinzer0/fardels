@@ -566,6 +566,7 @@ pub struct FardelResponse {
     pub carrier: String,
     pub public_message: String,
     pub cost: Uint128,
+    pub pending_unpack: bool,
     pub unpacked: bool,
     pub sealed: bool,
     pub tags: Vec<String>,
