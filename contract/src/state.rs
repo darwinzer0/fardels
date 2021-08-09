@@ -11,7 +11,6 @@ pub const PREFIX_CONFIG: &[u8] = b"config";
 pub const KEY_CONSTANTS: &[u8] = b"constants";
 pub const KEY_FARDEL_COUNT: &[u8] = b"fardel-count";
 pub const KEY_FROZEN: &[u8] = b"frozen";
-pub const KEY_COMMISSION_BALANCE: &[u8] = b"commission";
 
 // Fardel
 pub const PREFIX_FARDELS: &[u8] = b"fardel";
@@ -181,31 +180,6 @@ pub fn set_frozen<S: Storage>(storage: &mut S, value: bool) -> StdResult<()> {
 
 pub fn is_frozen<S: ReadonlyStorage>(storage: &S) -> bool {
     get_bin_data(storage, KEY_FROZEN).unwrap_or_else(|_| false)
-}
-
-//
-// Commission balance
-//
-pub fn get_commission_balance<S: ReadonlyStorage>(storage: &S) -> u128 {
-    get_bin_data(storage, KEY_COMMISSION_BALANCE).unwrap_or_else(|_| 0_u128)
-}
-
-pub fn add_to_commission_balance<S: Storage>(storage: &mut S, amount: u128) -> StdResult<()> {
-    let current_amount = get_commission_balance(storage);
-    set_bin_data(storage, KEY_COMMISSION_BALANCE, &(current_amount + amount))
-}
-
-pub fn subtract_from_commission_balance<S: Storage>(
-    storage: &mut S,
-    amount: u128,
-) -> StdResult<()> {
-    let current_amount = get_commission_balance(storage);
-    if current_amount < amount {
-        return Err(StdError::generic_err(
-            "Cannot subtract more than current commission amount.",
-        ));
-    }
-    set_bin_data(storage, KEY_COMMISSION_BALANCE, &(current_amount - amount))
 }
 
 //

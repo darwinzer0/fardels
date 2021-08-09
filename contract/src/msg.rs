@@ -73,11 +73,6 @@ pub enum HandleMsg {
         address: Option<HumanAddr>,
         padding: Option<String>,
     },
-    DrawCommission {
-        address: Option<HumanAddr>,
-        amount: Option<Uint128>,
-        padding: Option<String>,
-    },
 
     // Account
     Register {
@@ -257,12 +252,6 @@ pub enum HandleAnswer {
     },
     UnfreezeContract {
         status: ResponseStatus,
-    },
-    DrawCommission {
-        status: ResponseStatus,
-        address: HumanAddr,
-        amount: Uint128,
-        msg: Option<String>,
     },
     Ban {
         status: ResponseStatus,

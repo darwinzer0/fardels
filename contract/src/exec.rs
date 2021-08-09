@@ -13,7 +13,7 @@ use crate::social_state::{
     get_rating, has_rated, is_blocked_by, remove_following, remove_rated, set_rated,
     store_account_block, store_following, subtract_downvote_fardel, subtract_upvote_fardel,
 };
-use crate::state::{get_commission_balance, set_frozen, Config, ReadonlyConfig};
+use crate::state::{set_frozen, Config, ReadonlyConfig};
 use crate::tx_state::{append_purchase_tx, append_sale_tx};
 use crate::u256_math::*;
 use crate::unpack_state::{
@@ -212,55 +212,6 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
             data: Some(to_binary(&HandleAnswer::Unban { status, msg })?),
         })
     }
-}
-
-pub fn try_draw_commission<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    address: Option<HumanAddr>,
-    amount: Option<Uint128>,
-) -> StdResult<HandleResponse> {
-    let status = Success;
-    let msg = None;
-
-    let config = Config::from_storage(&mut deps.storage);
-    let constants = config.constants()?;
-
-    // permission check
-    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
-        return Err(StdError::unauthorized());
-    }
-
-    let address = match address {
-        Some(a) => a,
-        None => deps.api.human_address(&constants.admin)?,
-    };
-
-    let amount = match amount {
-        Some(a) => a.u128(),
-        None => get_commission_balance(&deps.storage),
-    };
-
-    let mut messages: Vec<CosmosMsg> = vec![];
-    messages.push(CosmosMsg::Bank(BankMsg::Send {
-        from_address: env.contract.address.clone(),
-        to_address: address.clone(),
-        amount: vec![Coin {
-            denom: DENOM.to_string(),
-            amount: Uint128(amount),
-        }],
-    }));
-
-    Ok(HandleResponse {
-        messages,
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::DrawCommission {
-            status,
-            msg,
-            amount: Uint128(amount),
-            address: address.clone(),
-        })?),
-    })
 }
 
 // all user functions

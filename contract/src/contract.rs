@@ -1,6 +1,6 @@
 use crate::exec::{
     try_approve_pending_unpacks, try_cancel_pending, try_carry_fardel, try_change_admin,
-    try_comment_on_fardel, try_delete_comment, try_draw_commission, try_follow,
+    try_comment_on_fardel, try_delete_comment, try_follow,
     try_generate_viewing_key, try_hide_fardel, try_rate_fardel, try_register, try_seal_fardel,
     try_set_constants, try_set_description, try_set_handle, try_set_private_settings,
     try_set_profile_img, try_set_view_settings, try_set_viewing_key, try_store_ban,
@@ -158,9 +158,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Unban {
             handle, address, ..
         } => try_store_ban(deps, env, handle, address, false),
-        HandleMsg::DrawCommission {
-            address, amount, ..
-        } => try_draw_commission(deps, env, address, amount),
 
         // Account
         HandleMsg::Register {
