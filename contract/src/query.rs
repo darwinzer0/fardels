@@ -13,7 +13,7 @@ use crate::social_state::{
     get_upvotes, is_following,
 };
 use crate::state::ReadonlyConfig;
-use crate::tx_state::{get_purchase_txs, get_sale_txs, PurchaseTx, SaleTx};
+use crate::tx_state::{get_purchase_txs, get_sale_txs, get_number_of_sales, get_number_of_purchases, PurchaseTx, SaleTx};
 use crate::unpack_state::{
     get_number_of_unpacked_by_unpacker, get_pending_approvals_from_start,
     get_pending_unpacked_status_by_fardel_id, get_unpacked_by_unpacker,
@@ -342,7 +342,9 @@ pub fn query_get_sale_transactions<S: Storage, A: Api, Q: Querier>(
 
     let txs: Vec<SaleTx> =
         get_sale_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
-    let response = QueryAnswer::GetSaleTransactions { txs };
+    let total_count = get_number_of_sales(&deps.storage, &address)? as i32;
+    
+    let response = QueryAnswer::GetSaleTransactions { txs, total_count };
     to_binary(&response)
 }
 
@@ -365,7 +367,9 @@ pub fn query_get_purchase_transactions<S: Storage, A: Api, Q: Querier>(
 
     let txs: Vec<PurchaseTx> =
         get_purchase_txs(&deps.storage, &address, page, page_size).unwrap_or_else(|_| vec![]);
-    let response = QueryAnswer::GetPurchaseTransactions { txs };
+    let total_count = get_number_of_purchases(&deps.storage, &address)? as i32;
+
+    let response = QueryAnswer::GetPurchaseTransactions { txs, total_count };
     to_binary(&response)
 }
 

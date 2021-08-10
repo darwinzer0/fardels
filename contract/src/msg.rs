@@ -651,9 +651,11 @@ pub enum QueryAnswer {
 
     GetSaleTransactions {
         txs: Vec<SaleTx>,
+        total_count: i32,
     },
     GetPurchaseTransactions {
         txs: Vec<PurchaseTx>,
+        total_count: i32,
     },
     GetHandle {
         status: ResponseStatus,

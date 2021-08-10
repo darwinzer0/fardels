@@ -98,6 +98,21 @@ pub fn get_sale_txs<S: ReadonlyStorage>(
     txs
 }
 
+pub fn get_number_of_sales<S: ReadonlyStorage>(
+    storage: &S,
+    owner: &CanonicalAddr,
+) -> StdResult<u32> {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_SALE_TX, owner.as_slice()], storage);
+
+    // Try to access the storage of sale txs for the account.
+    // If it doesn't exist yet, return an empty list.
+    if let Some(result) = AppendStore::<StoredSaleTx, _>::attach(&store) {
+        return Ok(result?.len());
+    } else {
+        return Ok(0_u32);
+    };
+}
+
 //
 // Purchase transaction record
 //
@@ -189,4 +204,19 @@ pub fn get_purchase_txs<S: ReadonlyStorage>(
         .map(|tx| tx.map(|tx| tx.into_humanized(storage)).and_then(|x| x))
         .collect();
     txs
+}
+
+pub fn get_number_of_purchases<S: ReadonlyStorage>(
+    storage: &S,
+    unpacker: &CanonicalAddr,
+) -> StdResult<u32> {
+    let store = ReadonlyPrefixedStorage::multilevel(&[PREFIX_PURCHASE_TX, unpacker.as_slice()], storage);
+
+    // Try to access the storage of purchase txs for the account.
+    // If it doesn't exist yet, return an empty list.
+    if let Some(result) = AppendStore::<StoredPurchaseTx, _>::attach(&store) {
+        return Ok(result?.len());
+    } else {
+        return Ok(0_u32);
+    };
 }
