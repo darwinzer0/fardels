@@ -1,7 +1,7 @@
 use crate::fardel_state::get_fardel_by_global_id;
 use crate::state::{PREFIX_PURCHASE_TX, PREFIX_SALE_TX};
 use crate::user_state::get_account;
-use cosmwasm_std::{CanonicalAddr, ReadonlyStorage, StdResult, Storage, Uint128};
+use cosmwasm_std::{debug_print, CanonicalAddr, ReadonlyStorage, StdResult, Storage, Uint128};
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
 use schemars::JsonSchema;
 use secret_toolkit::storage::{AppendStore, AppendStoreMut};
@@ -192,6 +192,8 @@ pub fn get_purchase_txs<S: ReadonlyStorage>(
         return Ok(vec![]);
     };
 
+    debug_print!("{}", page);
+    debug_print!("{}", page_size); 
     // Take `page_size` txs starting from the latest tx, potentially skipping `page * page_size`
     // txs from the start.
     let tx_iter = store
@@ -201,7 +203,10 @@ pub fn get_purchase_txs<S: ReadonlyStorage>(
         .take(page_size as _);
     // The `and_then` here flattens the `StdResult<StdResult<Tx>>` to an `StdResult<Tx>`
     let txs: StdResult<Vec<PurchaseTx>> = tx_iter
-        .map(|tx| tx.map(|tx| tx.into_humanized(storage)).and_then(|x| x))
+        .map(|tx| tx.map(|tx| tx.into_humanized(storage)).and_then(|x| {
+            debug_print!("{:?}", x); 
+            x
+        }))
         .collect();
     txs
 }
