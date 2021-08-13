@@ -1099,9 +1099,13 @@ pub fn try_unpack_fardel<S: Storage, A: Api, Q: Querier>(
                             msg = Some(String::from("Fardel has been sealed."));
                         // 6. check that countable packages have not been all unpacked
                         } else if f.clone().sold_out(&deps.storage) {
-                            // we don't seal here, just in case someone cancels a pending unpack and it re-opens
+                            // when approval required we don't seal here, just in case someone cancels 
+                            //   a pending unpack and it re-opens
+                            if !f.approval_req {
+                                seal_fardel(&mut deps.storage, global_id)?;
+                            }
                             status = Failure;
-                            msg = Some(String::from("Fardel has been sealed."));
+                            msg = Some(String::from("Fardel is sold out."));
                         // 7. check cost is correct
                         } else if sent_amount != cost {
                             status = Failure;
