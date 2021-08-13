@@ -1,7 +1,7 @@
 use crate::fardel_state::{
     get_fardel_by_global_id, get_fardel_by_hash, get_fardel_img, get_fardel_owner, get_fardels,
     get_global_id_by_hash, get_number_of_fardels, get_sealed_status, get_total_fardel_count,
-    is_fardel_hidden, Fardel,
+    is_fardel_hidden, Fardel, get_fardel_unpack_count,
 };
 use crate::msg::{
     CommentResponse, FardelBatchResponse, FardelResponse, PendingApprovalResponse, QueryAnswer,
@@ -120,9 +120,10 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     }
     let sealed = get_sealed_status(&deps.storage, global_id);
     let img = get_fardel_img(&deps.storage, global_id);
-    let mut countable: Option<i32> = None;
+    let mut remaining: Option<i32> = None;
     if fardel.countable > 0 {
-        countable = Some(fardel.countable as i32);
+        let unpack_count = get_fardel_unpack_count(&deps.storage, global_id).unwrap_or_else(|_| 0_u64) as u16;
+        remaining = Some((fardel.countable - unpack_count) as i32);
     }
 
     let fardel_owner = get_fardel_owner(&deps.storage, global_id).unwrap();
@@ -139,7 +140,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         upvotes,
         downvotes,
         number_of_comments,
-        countable,
+        remaining,
         seal_time,
         sealed,
         timestamp,
@@ -222,9 +223,11 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 }
                 let sealed = get_sealed_status(&deps.storage, global_id);
                 let img = get_fardel_img(&deps.storage, global_id);
-                let mut countable: Option<i32> = None;
+
+                let mut remaining: Option<i32> = None;
                 if fardel.countable > 0 {
-                    countable = Some(fardel.countable as i32);
+                    let unpack_count = get_fardel_unpack_count(&deps.storage, global_id).unwrap_or_else(|_| 0_u64) as u16;
+                    remaining = Some((fardel.countable - unpack_count) as i32);
                 }
 
                 let fardel_owner = get_fardel_owner(&deps.storage, global_id).unwrap();
@@ -241,7 +244,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     upvotes,
                     downvotes,
                     number_of_comments,
-                    countable,
+                    remaining,
                     seal_time,
                     sealed,
                     timestamp,
@@ -548,9 +551,11 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
             }
             let sealed = get_sealed_status(&deps.storage, unpack_id);
             let img = get_fardel_img(&deps.storage, unpack_id);
-            let mut countable: Option<i32> = None;
+
+            let mut remaining: Option<i32> = None;
             if fardel.countable > 0 {
-                countable = Some(fardel.countable as i32);
+                let unpack_count = get_fardel_unpack_count(&deps.storage, unpack_id).unwrap_or_else(|_| 0_u64) as u16;
+                remaining = Some((fardel.countable - unpack_count) as i32);
             }
 
             let fardel_owner = get_fardel_owner(&deps.storage, unpack_id).unwrap();
@@ -567,7 +572,7 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
                 upvotes,
                 downvotes,
                 number_of_comments,
-                countable,
+                remaining,
                 seal_time,
                 sealed,
                 timestamp,
@@ -692,10 +697,13 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                 let sealed = get_sealed_status(&deps.storage, idx);
                 let img = get_fardel_img(&deps.storage, idx);
                 let account = get_account(&deps.storage, &owner)?.into_humanized(&deps.api)?;
-                let mut countable: Option<i32> = None;
+
+                let mut remaining: Option<i32> = None;
                 if fardel.countable > 0 {
-                    countable = Some(fardel.countable as i32);
+                    let unpack_count = get_fardel_unpack_count(&deps.storage, idx).unwrap_or_else(|_| 0_u64) as u16;
+                    remaining = Some((fardel.countable - unpack_count) as i32);
                 }
+
                 // fardel batch only gets public data
                 fardels.push(FardelBatchResponse {
                     global_id: Uint128(idx),
@@ -706,7 +714,7 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
                     upvotes,
                     downvotes,
                     number_of_comments,
-                    countable,
+                    remaining,
                     seal_time,
                     sealed,
                     timestamp,

@@ -577,8 +577,8 @@ pub struct FardelResponse {
     pub timestamp: i32,
     pub img: String,
     pub seal_time: Option<i32>,
-    // if countable returns the number for sale
-    pub countable: Option<i32>,
+    // if countable returns the number left for sale
+    pub remaining: Option<i32>,
     // unpacked parts
     pub contents_data: Option<String>,
 }
@@ -607,7 +607,7 @@ pub struct FardelBatchResponse {
     pub timestamp: i32,
     pub img: String,
     pub seal_time: Option<i32>,
-    pub countable: Option<i32>,
+    pub remaining: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
