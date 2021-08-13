@@ -33,7 +33,7 @@ use crate::validation::{
 };
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{
-    to_binary, Api, BankMsg, CanonicalAddr, Coin, CosmosMsg, Env, Extern, HandleResponse,
+    to_binary, Api, BankMsg, Coin, CosmosMsg, Env, Extern, HandleResponse,
     HumanAddr, Querier, StdError, StdResult, Storage, Uint128,
 };
 use primitive_types::U256;
