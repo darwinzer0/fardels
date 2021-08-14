@@ -95,6 +95,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
     let banned = is_banned(&deps.storage, &owner);
     let deactivated = is_deactivated(&deps.storage, &owner);
     let hidden = is_fardel_hidden(&deps.storage, global_id);
+    let mut rating: Option<bool> = None;
 
     if address.is_some() {
         let unpacker_address = address.clone().unwrap();
@@ -109,6 +110,11 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         } else if banned || deactivated || hidden {
             return Err(StdError::generic_err("Fardel not found."));
         }
+
+        match get_rating(&deps.storage, &unpacker, global_id) {
+            Ok(r) => rating = Some(r),
+            Err(_) => {}
+        };
     } else if banned || deactivated || hidden {
         return Err(StdError::generic_err("Fardel not found."));
     }
@@ -145,6 +151,7 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
         sealed,
         timestamp,
         contents_data,
+        rating,
         img,
     };
     let answer = QueryAnswer::GetFardelById {
@@ -202,6 +209,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 let mut contents_data: Option<String> = None;
                 let mut unpacked = false;
                 let mut pending_unpack = false;
+                let mut rating: Option<bool> = None;
 
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
@@ -214,6 +222,11 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     } else if get_pending_unpacked_status_by_fardel_id(&deps.storage, &unpacker, global_id).value {
                         pending_unpack = true;
                     }
+
+                    match get_rating(&deps.storage, &unpacker, global_id) {
+                        Ok(r) => rating = Some(r),
+                        Err(_) => {}
+                    };
                 }
 
                 let timestamp: i32 = fardel.timestamp as i32;
@@ -249,6 +262,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                     sealed,
                     timestamp,
                     contents_data,
+                    rating,
                     img,
                 }
             })
@@ -561,6 +575,12 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
             let fardel_owner = get_fardel_owner(&deps.storage, unpack_id).unwrap();
             let carrier = get_account(&deps.storage, &fardel_owner).unwrap().into_humanized(&deps.api).unwrap().handle;
 
+            let mut rating: Option<bool> = None;
+            match get_rating(&deps.storage, &address, unpack_id) {
+                Ok(r) => rating = Some(r),
+                Err(_) => {}
+            };
+
             fardels.push(FardelResponse {
                 id: fardel.hash_id,
                 carrier,
@@ -577,6 +597,7 @@ pub fn query_get_unpacked<S: Storage, A: Api, Q: Querier>(
                 sealed,
                 timestamp,
                 contents_data: Some(fardel.contents_data),
+                rating,
                 img,
             });
         }

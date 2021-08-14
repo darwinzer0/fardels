@@ -581,6 +581,8 @@ pub struct FardelResponse {
     pub remaining: Option<i32>,
     // unpacked parts
     pub contents_data: Option<String>,
+    // user's current rating of this fardel if there is one
+    pub rating: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
