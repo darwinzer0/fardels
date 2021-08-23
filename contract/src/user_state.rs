@@ -3,7 +3,7 @@ use crate::state::{
     PREFIX_DEACTIVATED, PREFIX_HANDLES, PREFIX_REGISTERED_ADDRESSES, PREFIX_VIEWING_KEY,
 };
 use crate::viewing_key::ViewingKey;
-use cosmwasm_std::{Api, CanonicalAddr, HumanAddr, ReadonlyStorage, StdResult, Storage};
+use cosmwasm_std::{Api, CanonicalAddr, HumanAddr, ReadonlyStorage, StdResult, Storage, StdError,};
 use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
 use schemars::JsonSchema;
 use secret_toolkit::storage::{AppendStore, AppendStoreMut};
@@ -189,6 +189,23 @@ pub fn address_list_add<S: Storage>(storage: &mut S, address: &CanonicalAddr) ->
     let mut storage = AppendStoreMut::<CanonicalAddr, _>::attach_or_create(&mut storage)?;
     storage.push(address)?;
     Ok(storage.len())
+}
+
+pub fn get_registered_address<S: ReadonlyStorage>(
+    storage: &S,
+    idx: u32,
+) -> StdResult<CanonicalAddr> {
+    let storage = ReadonlyPrefixedStorage::new(PREFIX_REGISTERED_ADDRESSES, storage);
+
+    // Try to access the storage of addresses using contract
+    // If it doesn't exist yet, return an empty list.
+    let storage = if let Some(result) = AppendStore::<CanonicalAddr, _>::attach(&storage) {
+        result?
+    } else {
+        return Err(StdError::generic_err("Error accessing storage of addresses"));
+    };
+
+    storage.get_at(idx)
 }
 
 pub fn get_registered_addresses<S: ReadonlyStorage>(
