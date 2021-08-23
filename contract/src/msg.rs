@@ -383,6 +383,10 @@ pub enum QueryMsg {
     GetProfile {
         handle: String,
     },
+    // Get a profile by number
+    GetProfileByIndex {
+        idx: i32,
+    },
     // Check if the given handle is available
     IsHandleAvailable {
         handle: String,
@@ -627,6 +631,14 @@ pub struct RegisteredAccountsResponse {
 #[serde(rename_all = "snake_case")]
 pub enum QueryAnswer {
     GetProfile {
+        status: ResponseStatus,
+        handle: Option<String>,
+        description: Option<String>,
+        view_settings: Option<String>,
+        img: Option<String>,
+        follower_count: i32,
+    },
+    GetProfileByIndex {
         status: ResponseStatus,
         handle: Option<String>,
         description: Option<String>,

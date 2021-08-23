@@ -21,7 +21,7 @@ use crate::unpack_state::{
 };
 use crate::user_state::{
     get_account, get_account_for_handle, get_account_img, get_registered_addresses, is_banned,
-    is_deactivated, Account, get_total_number_registered_accounts,
+    is_deactivated, Account, get_total_number_registered_accounts, get_registered_address,
 };
 use cosmwasm_std::{
     to_binary, Api, Extern, HumanAddr, Querier, QueryResult, StdError, Storage, Uint128,
@@ -48,6 +48,50 @@ pub fn query_get_profile<S: Storage, A: Api, Q: Querier>(
         description: Some(account.description),
         view_settings: Some(account.view_settings),
         img: Some(img_str),
+        follower_count,
+    };
+    to_binary(&answer)
+}
+
+pub fn query_get_profile_by_index<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    idx: i32,
+) -> QueryResult {
+    let mut status: ResponseStatus = Success;
+    let mut handle: Option<String> = None;
+    let mut description: Option<String> = None;
+    let mut view_settings: Option<String> = None;
+    let mut img: Option<String> = None;
+    let mut follower_count: i32 = 0;
+    if idx < 0 {
+        status = Failure;
+    } else {
+        let number_of_accounts = get_total_number_registered_accounts(&deps.storage)?;
+        let mut which: u32 = idx as u32;
+        if number_of_accounts <= which {
+            which = which % number_of_accounts;
+        }
+        let user_address = get_registered_address(&deps.storage, which)?;
+        if !is_banned(&deps.storage, &user_address) && !is_deactivated(&deps.storage, &user_address) {
+            let account = get_account(&deps.storage, &user_address)?.into_humanized(&deps.api)?;
+            let img_vec = get_account_img(&deps.storage, &user_address).unwrap_or_else(|_| vec![]);
+            let img_str = String::from_utf8(img_vec).unwrap();
+            follower_count = get_follower_count(&deps.storage, &user_address) as i32;
+            handle = Some(account.handle);
+            description = Some(account.description);
+            view_settings = Some(account.view_settings);
+            img = Some(img_str);            
+        } else {
+            status = Failure;
+        }
+    }
+
+    let answer = QueryAnswer::GetProfileByIndex {
+        status,
+        handle,
+        description,
+        img,
+        view_settings,
         follower_count,
     };
     to_binary(&answer)

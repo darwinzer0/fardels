@@ -13,7 +13,7 @@ use crate::query::{
     query_get_followers, query_get_following, query_get_handle, query_get_pending_approvals,
     query_get_profile, query_get_purchase_transactions, query_get_rating,
     query_get_registered_addresses, query_get_sale_transactions, query_get_unpacked,
-    query_is_following, query_is_handle_available, query_is_pending_unpack,
+    query_is_following, query_is_handle_available, query_is_pending_unpack, query_get_profile_by_index,
 };
 use crate::state::{is_frozen, Config, Constants, ReadonlyConfig};
 use crate::user_state::{is_banned, read_viewing_key};
@@ -258,6 +258,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
 pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryMsg) -> QueryResult {
     match msg {
         QueryMsg::GetProfile { handle } => query_get_profile(deps, handle),
+        QueryMsg::GetProfileByIndex { idx } => query_get_profile_by_index(deps, idx),
         QueryMsg::IsHandleAvailable { handle } => query_is_handle_available(deps, handle),
         QueryMsg::GetFardelById { fardel_id } => query_get_fardel_by_id(deps, &None, fardel_id),
         QueryMsg::GetFardels {
