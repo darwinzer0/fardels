@@ -9,6 +9,10 @@ use std::any::type_name;
 // Globals
 pub const PREFIX_CONFIG: &[u8] = b"config";
 pub const KEY_CONSTANTS: &[u8] = b"constants";
+// to change admin SetAdmin must be called 3 times with the same address
+//   to help prevent accidental change to wrong address
+pub const KEY_NEW_ADMIN: &[u8] = b"new-admin";
+pub const KEY_NEW_ADMIN_COUNT: &[u8] = b"new-admin-count";
 pub const KEY_FARDEL_COUNT: &[u8] = b"fardel-count";
 pub const KEY_FROZEN: &[u8] = b"frozen";
 
@@ -169,6 +173,25 @@ impl StoredFee {
         };
         Ok(fee)
     }
+}
+
+//
+// New admin
+//
+pub fn set_new_admin<S: Storage>(storage: &mut S, new_admin: &CanonicalAddr) -> StdResult<()> {
+    set_bin_data(storage, KEY_NEW_ADMIN, &new_admin.as_slice())
+}
+
+pub fn get_new_admin<S: Storage>(storage: &S) -> StdResult<CanonicalAddr> {
+    get_bin_data(storage, KEY_NEW_ADMIN)
+}
+
+pub fn set_new_admin_count<S: Storage>(storage: &mut S, new_admin_count: u8) -> StdResult<()> {
+    set_bin_data(storage, KEY_NEW_ADMIN_COUNT, &new_admin_count)
+}
+
+pub fn get_new_admin_count<S: Storage>(storage: &S) -> u8 {
+    get_bin_data(storage, KEY_NEW_ADMIN_COUNT).unwrap_or_else(|_| 0_u8)
 }
 
 //

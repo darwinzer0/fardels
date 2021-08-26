@@ -13,7 +13,7 @@ use crate::social_state::{
     get_rating, has_rated, is_blocked_by, remove_following, remove_rated, set_rated,
     store_account_block, store_following, subtract_downvote_fardel, subtract_upvote_fardel,
 };
-use crate::state::{set_frozen, Config, ReadonlyConfig};
+use crate::state::{get_new_admin, set_new_admin, get_new_admin_count, set_new_admin_count, set_frozen, Config, ReadonlyConfig};
 use crate::tx_state::{append_purchase_tx, append_sale_tx};
 use crate::u256_math::*;
 use crate::unpack_state::{
@@ -34,7 +34,7 @@ use crate::validation::{
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Coin, CosmosMsg, Env, Extern, HandleResponse,
-    HumanAddr, Querier, StdError, StdResult, Storage, Uint128,
+    HumanAddr, Querier, StdError, StdResult, Storage, Uint128, CanonicalAddr,
 };
 use primitive_types::U256;
 use std::convert::TryFrom;
@@ -112,22 +112,49 @@ pub fn try_change_admin<S: Storage, A: Api, Q: Querier>(
     env: Env,
     new_admin: HumanAddr,
 ) -> StdResult<HandleResponse> {
+    let new_admin_count = get_new_admin_count(&deps.storage);
+    let current_new_admin = get_new_admin(&deps.storage);
+
+    let msg;
     let mut config = Config::from_storage(&mut deps.storage);
     let mut constants = config.constants()?;
+
+    let new_admin_canonical: CanonicalAddr = deps.api.canonical_address(&new_admin)?;
 
     // permission check
     if deps.api.canonical_address(&env.message.sender)? != constants.admin {
         return Err(StdError::unauthorized());
     }
 
-    constants.admin = deps.api.canonical_address(&new_admin)?;
-
-    config.set_constants(&constants)?;
+    match current_new_admin {
+        Ok(address) => {
+            if address == new_admin_canonical { // check how many times reset requested
+                if new_admin_count >= 2 { // already requested this address twice, do reset
+                    constants.admin = new_admin_canonical;
+                    config.set_constants(&constants)?;
+                    set_new_admin_count(&mut deps.storage, 0_u8)?;
+                    msg = format!("Successfully reset admin to {}", new_admin);
+                } else {
+                    set_new_admin_count(&mut deps.storage, new_admin_count + 1)?;
+                    msg = format!("Request {} to reset admin to {}", new_admin_count + 1, new_admin);
+                }
+            } else { // new address
+                set_new_admin(&mut deps.storage, &new_admin_canonical)?;
+                set_new_admin_count(&mut deps.storage, 1_u8)?;
+                msg = format!("Request 1 to reset admin to {}", new_admin);
+            }
+        },
+        Err(_) => {
+            set_new_admin(&mut deps.storage, &new_admin_canonical)?;
+            set_new_admin_count(&mut deps.storage, 1_u8)?;
+            msg = format!("Request 1 to reset admin to {}", new_admin);
+        }
+    }
 
     Ok(HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::ChangeAdmin { status: Success })?),
+        data: Some(to_binary(&HandleAnswer::ChangeAdmin { status: Success, msg })?),
     })
 }
 

@@ -246,6 +246,7 @@ pub enum HandleAnswer {
     },
     ChangeAdmin {
         status: ResponseStatus,
+        msg: String,
     },
     FreezeContract {
         status: ResponseStatus,
