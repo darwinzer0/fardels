@@ -34,7 +34,7 @@ use crate::validation::{
 use crate::viewing_key::ViewingKey;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Coin, CosmosMsg, Env, Extern, HandleResponse,
-    HumanAddr, Querier, StdError, StdResult, Storage, Uint128, CanonicalAddr,
+    HumanAddr, Querier, StdError, StdResult, Storage, Uint128, CanonicalAddr, //debug_print,
 };
 use primitive_types::U256;
 use std::convert::TryFrom;
@@ -113,7 +113,9 @@ pub fn try_change_admin<S: Storage, A: Api, Q: Querier>(
     new_admin: HumanAddr,
 ) -> StdResult<HandleResponse> {
     let new_admin_count = get_new_admin_count(&deps.storage);
+    //debug_print!("{}", new_admin_count);
     let current_new_admin = get_new_admin(&deps.storage);
+    //debug_print!("{:?}", current_new_admin);
 
     let msg;
     let mut config = Config::from_storage(&mut deps.storage);
@@ -128,17 +130,21 @@ pub fn try_change_admin<S: Storage, A: Api, Q: Querier>(
 
     match current_new_admin {
         Ok(address) => {
+            //debug_print!("{:?}", address);
             if address == new_admin_canonical { // check how many times reset requested
                 if new_admin_count >= 2 { // already requested this address twice, do reset
+                    //debug_print!("first if");
                     constants.admin = new_admin_canonical;
                     config.set_constants(&constants)?;
                     set_new_admin_count(&mut deps.storage, 0_u8)?;
                     msg = format!("Successfully reset admin to {}", new_admin);
                 } else {
+                    //debug_print!("first else");
                     set_new_admin_count(&mut deps.storage, new_admin_count + 1)?;
                     msg = format!("Request {} to reset admin to {}", new_admin_count + 1, new_admin);
                 }
             } else { // new address
+                //debug_print!("second else");
                 set_new_admin(&mut deps.storage, &new_admin_canonical)?;
                 set_new_admin_count(&mut deps.storage, 1_u8)?;
                 msg = format!("Request 1 to reset admin to {}", new_admin);

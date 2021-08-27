@@ -179,7 +179,7 @@ impl StoredFee {
 // New admin
 //
 pub fn set_new_admin<S: Storage>(storage: &mut S, new_admin: &CanonicalAddr) -> StdResult<()> {
-    set_bin_data(storage, KEY_NEW_ADMIN, &new_admin.as_slice())
+    set_bin_data(storage, KEY_NEW_ADMIN, &new_admin)
 }
 
 pub fn get_new_admin<S: Storage>(storage: &S) -> StdResult<CanonicalAddr> {
