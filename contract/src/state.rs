@@ -23,6 +23,7 @@ pub const PREFIX_ID_FARDEL_MAPPINGS: &[u8] = b"id-to-fardel";
 pub const PREFIX_HASH_ID_MAPPINGS: &[u8] = b"hash-to-id";
 pub const PREFIX_SEALED: &[u8] = b"sealed";
 pub const PREFIX_HIDDEN: &[u8] = b"hidden";
+pub const PREFIX_REMOVED: &[u8] = b"removed";
 pub const PREFIX_FARDEL_NUM_UNPACKS: &[u8] = b"fardel-unpack-count";
 
 // Fardel unpacking

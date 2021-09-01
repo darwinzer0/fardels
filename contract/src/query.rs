@@ -1,7 +1,7 @@
 use crate::fardel_state::{
     get_fardel_by_global_id, get_fardel_by_hash, get_fardel_img, get_fardel_owner, get_fardels,
     get_global_id_by_hash, get_number_of_fardels, get_sealed_status, get_total_fardel_count,
-    is_fardel_hidden, Fardel, get_fardel_unpack_count,
+    is_fardel_hidden, Fardel, get_fardel_unpack_count, is_fardel_removed,
 };
 use crate::msg::{
     CommentResponse, FardelBatchResponse, FardelResponse, PendingApprovalResponse, QueryAnswer,
@@ -126,6 +126,11 @@ pub fn query_get_fardel_by_id<S: Storage, A: Api, Q: Querier>(
 
     let global_id = fardel.global_id.u128();
 
+    let removed = is_fardel_removed(&deps.storage, global_id);
+    if removed {
+        return Err(StdError::generic_err("Fardel not found."));
+    }
+
     let upvotes: i32 = get_upvotes(&deps.storage, global_id) as i32;
     let downvotes: i32 = get_downvotes(&deps.storage, global_id) as i32;
     let number_of_comments = get_number_of_comments(&deps.storage, global_id) as i32;
@@ -228,6 +233,9 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                 let global_id = fardel.global_id.u128();
                 let mut unpacked = false;
                 let mut pending_unpack = false;
+
+                let removed = is_fardel_removed(&deps.storage, global_id);
+
                 let hidden = is_fardel_hidden(&deps.storage, global_id);
                 if address.is_some() {
                     let unpacker_address = address.clone().unwrap();
@@ -240,7 +248,7 @@ pub fn query_get_fardels<S: Storage, A: Api, Q: Querier>(
                         pending_unpack = true;
                     }
                 }
-                !(banned || deactivated || hidden) || unpacked || pending_unpack
+                !removed && (!(banned || deactivated || hidden) || unpacked || pending_unpack)
             })
             .map(|fardel| {
                 let global_id = fardel.global_id.u128();
@@ -336,6 +344,12 @@ pub fn query_get_comments<S: Storage, A: Api, Q: Querier>(
         }
     };
     let global_id = fardel.global_id.u128();
+
+    let removed = is_fardel_removed(&deps.storage, global_id);
+    if removed {
+        return Err(StdError::generic_err("Fardel not found."));
+    }
+
     // make sure it is not hidden
     let mut unpacked = false;
     let owner = get_fardel_owner(&deps.storage, global_id)?;
@@ -744,9 +758,10 @@ pub fn query_get_fardels_batch<S: Storage, A: Api, Q: Querier>(
         let owner = get_fardel_owner(&deps.storage, idx)?;
         let banned = is_banned(&deps.storage, &owner);
         let deactivated = is_deactivated(&deps.storage, &owner);
+        let removed = is_fardel_removed(&deps.storage, idx);
         let hidden = is_fardel_hidden(&deps.storage, idx);
         // ignore if fardel is hidden or user is banned or deactivated
-        if !(banned || deactivated || hidden) {
+        if !(banned || deactivated || removed || hidden) {
             let fardel: Option<Fardel> = get_fardel_by_global_id(&deps.storage, idx)?;
             if fardel.is_some() {
                 let fardel = fardel.unwrap();

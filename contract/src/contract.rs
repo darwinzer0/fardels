@@ -5,7 +5,7 @@ use crate::exec::{
     try_set_constants, try_set_description, try_set_handle, try_set_private_settings,
     try_set_profile_img, try_set_view_settings, try_set_viewing_key, try_store_ban,
     try_store_block, try_store_deactivate, try_store_frozen_contract, try_unfollow,
-    try_unhide_fardel, try_unpack_fardel, try_unrate_fardel,
+    try_unhide_fardel, try_unpack_fardel, try_unrate_fardel, try_remove_fardel,
 };
 use crate::msg::{HandleMsg, InitMsg, QueryMsg};
 use crate::query::{
@@ -158,6 +158,12 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Unban {
             handle, address, ..
         } => try_store_ban(deps, env, handle, address, false),
+        HandleMsg::RemoveFardel {
+            fardel_id, ..
+        } => try_remove_fardel(deps, env, fardel_id, true),
+        HandleMsg::UnremoveFardel {
+            fardel_id, ..
+        } => try_remove_fardel(deps, env, fardel_id, false),
 
         // Account
         HandleMsg::Register {

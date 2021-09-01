@@ -73,6 +73,15 @@ pub enum HandleMsg {
         address: Option<HumanAddr>,
         padding: Option<String>,
     },
+    // admin function to remove a fardel
+    RemoveFardel {
+        fardel_id: Uint128,
+        padding: Option<String>,
+    },
+    UnremoveFardel {
+        fardel_id: Uint128,
+        padding: Option<String>,
+    },
 
     // Account
     Register {
@@ -259,6 +268,14 @@ pub enum HandleAnswer {
         msg: Option<String>,
     },
     Unban {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    RemoveFardel {
+        status: ResponseStatus,
+        msg: Option<String>,
+    },
+    UnremoveFardel {
         status: ResponseStatus,
         msg: Option<String>,
     },

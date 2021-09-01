@@ -1,7 +1,7 @@
 use crate::contract::DENOM;
 use crate::fardel_state::{
     decrement_fardel_unpack_count, get_fardel_by_global_id, get_fardel_by_hash, get_fardel_owner,
-    get_global_id_by_hash, get_sealed_status, get_total_fardel_count, hide_fardel,
+    get_global_id_by_hash, get_sealed_status, get_total_fardel_count, hide_fardel, remove_fardel, unremove_fardel,
     increment_fardel_unpack_count, seal_fardel, store_fardel, store_fardel_img, unhide_fardel,
     Fardel,
 };
@@ -245,6 +245,47 @@ pub fn try_store_ban<S: Storage, A: Api, Q: Querier>(
             data: Some(to_binary(&HandleAnswer::Unban { status, msg })?),
         })
     }
+}
+
+pub fn try_remove_fardel<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    fardel_id: Uint128,
+    removed: bool,
+) -> StdResult<HandleResponse> {
+    let mut status: ResponseStatus = Success;
+    let mut msg: Option<String> = None;
+
+    let config = Config::from_storage(&mut deps.storage);
+    let constants = config.constants()?;
+
+    // permission check
+    if deps.api.canonical_address(&env.message.sender)? != constants.admin {
+        return Err(StdError::unauthorized());
+    }
+
+    let fardel_id = fardel_id.u128();
+
+    match get_fardel_by_hash(&deps.storage, fardel_id) {
+        Ok(_) => {
+            let global_id = get_global_id_by_hash(&deps.storage, fardel_id)?;
+            if removed {
+                remove_fardel(&mut deps.storage, global_id)?;
+            } else {
+                unremove_fardel(&mut deps.storage, global_id)?;
+            }
+        }
+        _ => {
+            status = Failure;
+            msg = Some(String::from("No Fardel with given id."));
+        }
+    }
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![],
+        data: Some(to_binary(&HandleAnswer::RemoveFardel { status, msg })?),
+    })
 }
 
 // all user functions

@@ -1,7 +1,7 @@
 use crate::contract::DENOM;
 use crate::state::{
     get_bin_data, set_bin_data, KEY_FARDEL_COUNT, PREFIX_FARDELS, PREFIX_FARDEL_NUM_UNPACKS,
-    PREFIX_FARDEL_THUMBNAIL_IMGS, PREFIX_HASH_ID_MAPPINGS, PREFIX_HIDDEN,
+    PREFIX_FARDEL_THUMBNAIL_IMGS, PREFIX_HASH_ID_MAPPINGS, PREFIX_HIDDEN, PREFIX_REMOVED,
     PREFIX_ID_FARDEL_MAPPINGS, PREFIX_SEALED,
 };
 use crate::unpack_state::store_unpack;
@@ -411,6 +411,30 @@ pub fn unhide_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()
 //  true means hidden, false means not hidden
 pub fn is_fardel_hidden<S: ReadonlyStorage>(store: &S, fardel_id: u128) -> bool {
     let store = ReadonlyPrefixedStorage::new(PREFIX_HIDDEN, store);
+    get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
+}
+
+//
+//  Removed fardels
+//
+//    b"removed" | {global fardel id} -> true/false
+//       value == true means it is removed, value == false OR no record in storage means not removed
+//
+
+pub fn remove_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_REMOVED, store);
+    set_bin_data(&mut store, &fardel_id.to_be_bytes(), &true)
+}
+
+pub fn unremove_fardel<S: Storage>(store: &mut S, fardel_id: u128) -> StdResult<()> {
+    let mut store = PrefixedStorage::new(PREFIX_REMOVED, store);
+    set_bin_data(&mut store, &fardel_id.to_be_bytes(), &false)
+}
+
+// get removed status of a given fardel
+//  true means removed, false means not removed
+pub fn is_fardel_removed<S: ReadonlyStorage>(store: &S, fardel_id: u128) -> bool {
+    let store = ReadonlyPrefixedStorage::new(PREFIX_REMOVED, store);
     get_bin_data(&store, &fardel_id.to_be_bytes()).unwrap_or_else(|_| false)
 }
 
